@@ -134,3 +134,6 @@ component-model = [
   "dep:wasmtime-component-util",
   "dep:encoding_rs",
 ]
+
+# Enable quickjs-libc compatable code path
+quickjs-libc = ["wasmtime-runtime/quickjs-libc"]

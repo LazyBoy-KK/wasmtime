@@ -64,6 +64,10 @@ pub use crate::instance::{
 pub use crate::memory::{
     DefaultMemoryCreator, Memory, RuntimeLinearMemory, RuntimeMemoryCreator, SharedMemory,
 };
+
+#[cfg(feature = "quickjs-libc")]
+pub use crate::memory::TempMemory;
+
 pub use crate::mmap::Mmap;
 pub use crate::mmap_vec::MmapVec;
 pub use crate::store_box::*;

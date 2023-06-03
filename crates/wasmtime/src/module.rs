@@ -1288,6 +1288,17 @@ impl Module {
             (loc.start as usize, loc.length as usize)
         })
     }
+
+    #[cfg(feature = "quickjs-libc")]
+    /// Get index of module exports
+    pub fn exports_index<'module>(
+        &'module self,
+    ) -> impl ExactSizeIterator<Item = (String, wasmtime_environ::EntityIndex)> + 'module {
+        let module = self.compiled_module().module();
+        module.exports.iter().map(move |(name, entity_index)| {
+            (name.clone(), entity_index.clone())
+        })
+    }
 }
 
 impl ModuleInner {

@@ -1,5 +1,13 @@
 use crate::store::{StoreData, StoreOpaque, Stored};
 use crate::trampoline::generate_memory_export;
+
+#[cfg(feature = "quickjs-libc")]
+use crate::trampoline::generate_memory_export_for_temp;
+#[cfg(feature = "quickjs-libc")]
+use std::sync::Arc;
+#[cfg(feature = "quickjs-libc")]
+use wasmtime_runtime::ExportMemory;
+
 use crate::Trap;
 use crate::{AsContext, AsContextMut, Engine, MemoryType, StoreContext, StoreContextMut};
 use anyhow::{bail, Result};
@@ -268,6 +276,26 @@ impl Memory {
         unsafe {
             let export = generate_memory_export(store, &ty, None)?;
             Ok(Memory::from_wasmtime_memory(export, store))
+        }
+    }
+
+    #[cfg(feature = "quickjs-libc")]
+    /// new custom memory from temp memory
+    pub fn new_from_temp(mut store: impl AsContextMut, preallocation: TempMemory) -> Result<Memory> {
+        Self::_new_from_temp(store.as_context_mut().0, preallocation)
+    }
+
+    #[cfg(feature = "quickjs-libc")]
+    fn _new_from_temp(store: &mut StoreOpaque, preallocation: TempMemory) -> Result<Memory> {
+        assert!(
+            preallocation.comes_from_same_store(store),
+            "cross-store memory is not supported now"
+        );
+        unsafe {
+            let export = generate_memory_export_for_temp(store, &preallocation.ty(), Some(preallocation.get_mut().0.clone()))?;
+            let memory = Memory::from_wasmtime_memory(export, store);
+            preallocation.get_mut().2 = Some(memory.0);
+            Ok(memory)
         }
     }
 
@@ -921,6 +949,122 @@ impl SharedMemory {
 impl std::fmt::Debug for SharedMemory {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SharedMemory").finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "quickjs-libc")]
+/// Temp memory
+#[derive(Clone)]
+pub struct TempMemory(Arc<UnsafeCell<(wasmtime_runtime::TempMemory, Engine, Option<Stored<ExportMemory>>)>>);
+
+#[cfg(feature = "quickjs-libc")]
+impl TempMemory {
+    /// Construct a [`TempMemory`] by providing both the `minimum` and
+    /// `maximum` number of 64K-sized pages. This call allocates the necessary
+    /// pages on the system.
+    pub fn new(engine: &Engine, ty: MemoryType) -> Result<Self> {
+        if ty.is_shared() {
+            bail!("temp memory must not have the `shared` flag enabled on its memory type")
+        }
+        let tunables = &engine.config().tunables;
+        let plan = MemoryPlan::for_memory(ty.wasmtime_memory().clone(), tunables);
+        let memory = wasmtime_runtime::TempMemory::new(plan)?;
+        Ok(Self(Arc::new(UnsafeCell::new((memory, engine.clone(), None)))))
+    }
+
+    fn get_mut(&self) -> &mut (wasmtime_runtime::TempMemory, Engine, Option<Stored<ExportMemory>>) {
+        unsafe { &mut *self.0.get() }
+    }
+
+    /// Return the type of the shared memory.
+    pub fn ty(&self) -> MemoryType {
+        MemoryType::from_wasmtime_memory(&self.get_mut().0.ty())
+    }
+
+    /// Returns the size, in WebAssembly pages, of this wasm memory.
+    pub fn size(&self) -> u64 {
+        (self.data_size() / wasmtime_environ::WASM_PAGE_SIZE as usize) as u64
+    }
+
+    /// Returns the byte length of this memory.
+    ///
+    /// The returned value will be a multiple of the wasm page size, 64k.
+    ///
+    /// For more information and examples see the documentation on the
+    /// [`Memory`] type.
+    pub fn data_size(&self) -> usize {
+        self.get_mut().0.byte_size()
+    }
+
+    /// Get data slice from memory
+    pub fn data(&self) -> &[u8] {
+        unsafe {
+            let definition = self.get_mut().0.vmmemory();
+            slice::from_raw_parts(definition.base.cast(), definition.current_length())
+        }
+    }
+
+    /// Get mut data slice from memory
+    pub fn data_mut(&self) -> &mut [u8] {
+        unsafe {
+            let definition = self.get_mut().0.vmmemory();
+            slice::from_raw_parts_mut(definition.base.cast(), definition.current_length())
+        }
+    }
+
+    /// Grows this WebAssembly memory by `delta` pages.
+    ///
+    /// This will attempt to add `delta` more pages of memory on to the end of
+    /// this `Memory` instance. If successful this may relocate the memory and
+    /// cause [`Memory::data_ptr`] to return a new value. Additionally any
+    /// unsafely constructed slices into this memory may no longer be valid.
+    ///
+    /// On success returns the number of pages this memory previously had
+    /// before the growth succeeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if memory could not be grown, for example if it exceeds
+    /// the maximum limits of this memory. A
+    /// [`ResourceLimiter`](crate::ResourceLimiter) is another example of
+    /// preventing a memory to grow.
+    pub fn grow(&self, store: Option<impl AsContextMut>, delta: u64) -> Result<u64> {
+        if self.get_mut().2.is_some() && store.is_none() {
+            bail!("temp memory must be grown with a store after importing");
+        }
+        match self.get_mut().0.grow(delta, None)? {
+            Some((old_size, _new_size)) => {
+                if let Some(export_memory) = self.get_mut().2 {
+                    if let Some(mut store) = store {
+                        let vm = self.get_mut().0.vmmemory();
+                        let store = store.as_context_mut().0;
+                        unsafe { *store[export_memory].definition = vm; }
+                    }
+                }
+                Ok(u64::try_from(old_size).unwrap() / u64::from(wasmtime_environ::WASM_PAGE_SIZE))
+            }
+            None => bail!("failed to grow memory by `{}`", delta),
+        }
+    }
+
+    /// return true if the temp memory has been imported in an instance
+    pub fn has_imported(&self) -> bool {
+        self.get_mut().2.is_some()
+    }
+
+    pub(crate) fn comes_from_same_store(&self, store: &StoreOpaque) -> bool {
+        if let Some(m) = self.get_mut().2 {
+            store.store_data().contains(m)
+        } else {
+            true
+        }
+    }
+}
+
+#[cfg(feature = "quickjs-libc")]
+impl std::fmt::Debug for TempMemory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TempMemory").finish_non_exhaustive()
     }
 }
 

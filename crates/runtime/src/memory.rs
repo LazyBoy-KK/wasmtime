@@ -658,6 +658,104 @@ impl RuntimeLinearMemory for SharedMemory {
     }
 }
 
+#[cfg(feature = "quickjs-libc")]
+/// Create temp memory
+#[derive(Clone)]
+pub struct TempMemory(Arc<TempMemoryInner>);
+
+#[cfg(feature = "quickjs-libc")]
+struct TempMemoryInner {
+    memory: RwLock<Box<dyn RuntimeLinearMemory>>,
+    ty: wasmtime_environ::Memory,
+}
+
+#[cfg(feature = "quickjs-libc")]
+impl TempMemory {
+    /// Construct a new [`TempMemory`].
+    pub fn new(plan: MemoryPlan) -> Result<Self> {
+        let (minimum_bytes, maximum_bytes) = Memory::limit_new(&plan, None)?;
+        let mmap_memory = MmapMemory::new(&plan, minimum_bytes, maximum_bytes, None)?;
+        Self::wrap(Box::new(mmap_memory), plan.memory)
+    }
+
+    /// Wrap an existing [Memory] with the locking provided by a [TempMemory].
+    pub fn wrap(
+        mut memory: Box<dyn RuntimeLinearMemory>,
+        ty: wasmtime_environ::Memory,
+    ) -> Result<Self> {
+        if ty.shared {
+            bail!("temp memory must not have a `shared` memory type");
+        }
+        assert!(
+            memory.as_any_mut().type_id() != std::any::TypeId::of::<TempMemory>(),
+            "cannot re-wrap a temp memory"
+        );
+        Ok(Self(Arc::new(TempMemoryInner {
+            ty,
+            memory: RwLock::new(memory),
+        })))
+    }
+
+    /// Return the memory type for this [`TempMemory`].
+    pub fn ty(&self) -> wasmtime_environ::Memory {
+        self.0.ty
+    }
+
+    /// Convert this shared memory into a [`Memory`].
+    pub fn as_memory(self) -> Memory {
+        Memory(Box::new(self))
+    }
+
+    /// Same as `RuntimeLinearMemory::grow`, except with `&self`.
+    pub fn grow(
+        &mut self,
+        delta_pages: u64,
+        store: Option<&mut dyn Store>,
+    ) -> Result<Option<(usize, usize)>, Error> {
+        let result = self.0.memory.write().unwrap().grow(delta_pages, store)?;
+        Ok(result)
+    }
+}
+
+#[cfg(feature = "quickjs-libc")]
+impl RuntimeLinearMemory for TempMemory {
+    fn byte_size(&self) -> usize {
+        self.0.memory.read().unwrap().byte_size()
+    }
+
+    fn maximum_byte_size(&self) -> Option<usize> {
+        self.0.memory.read().unwrap().maximum_byte_size()
+    }
+
+    fn grow(
+        &mut self,
+        delta_pages: u64,
+        store: Option<&mut dyn Store>,
+    ) -> Result<Option<(usize, usize)>, Error> {
+        TempMemory::grow(self, delta_pages, store)
+    }
+
+    fn grow_to(&mut self, size: usize) -> Result<()> {
+        self.0.memory.write().unwrap().grow_to(size)
+    }
+
+    fn vmmemory(&mut self) -> VMMemoryDefinition {
+        self.0.memory.write().unwrap().vmmemory()
+    }
+
+    fn needs_init(&self) -> bool {
+        self.0.memory.read().unwrap().needs_init()
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn wasm_accessible(&self) -> Range<usize> {
+        self.0.memory.read().unwrap().wasm_accessible()
+    }
+}
+
 /// Representation of a runtime wasm linear memory.
 pub struct Memory(Box<dyn RuntimeLinearMemory>);
 

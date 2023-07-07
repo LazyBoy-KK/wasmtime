@@ -224,11 +224,7 @@ pub(crate) struct FileEntry {
 }
 
 bitflags! {
-<<<<<<< HEAD
-    pub(crate) struct FileAccessMode : u32 {
-=======
     pub struct FileAccessMode : u32 {
->>>>>>> v10.0.1
         const READ = 0b1;
         const WRITE= 0b10;
     }

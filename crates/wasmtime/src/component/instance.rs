@@ -654,17 +654,17 @@ impl<'a, 'store> ExportInstance<'a, 'store> {
         }
     }
 
-    #[cfg(feature = "quickjs-libc")]
+    // #[cfg(feature = "quickjs-libc")]
     /// return funcs
-    pub fn funcs(&mut self) -> impl ExactSizeIterator<Item = (String, Func)> {
-        self.exports.iter().filter_map(|name, export| {
+    pub fn funcs(&'a mut self) -> impl Iterator<Item = (String, Func)> + 'a {
+        self.exports.iter().filter_map(|(name, export)| {
             if let Export::LiftedFunction { 
                 ty, 
                 func, 
                 options 
             } = export {
-                Some(
-                    name,
+                Some((
+                    name.clone(),
                     Func::from_lifted_func(
                         self.store,
                         self.instance,
@@ -673,7 +673,7 @@ impl<'a, 'store> ExportInstance<'a, 'store> {
                         func,
                         options,
                     )
-                )
+                ))
             } else {
                 None
             }

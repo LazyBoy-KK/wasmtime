@@ -654,6 +654,32 @@ impl<'a, 'store> ExportInstance<'a, 'store> {
         }
     }
 
+    #[cfg(feature = "quickjs-libc")]
+    /// return funcs
+    pub fn funcs(&mut self) -> impl ExactSizeIterator<Item = (String, Func)> {
+        self.exports.iter().filter_map(|name, export| {
+            if let Export::LiftedFunction { 
+                ty, 
+                func, 
+                options 
+            } = export {
+                Some(
+                    name,
+                    Func::from_lifted_func(
+                        self.store,
+                        self.instance,
+                        self.data,
+                        *ty,
+                        func,
+                        options,
+                    )
+                )
+            } else {
+                None
+            }
+        })
+    }
+
     /// Same as [`Instance::get_typed_func`]
     pub fn typed_func<Params, Results>(&mut self, name: &str) -> Result<TypedFunc<Params, Results>>
     where

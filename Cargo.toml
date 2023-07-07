@@ -85,132 +85,132 @@ anyhow = { workspace = true }
 [profile.release.build-override]
 opt-level = 0
 
-# [workspace]
-# resolver = '2'
-# members = [
-#   "cranelift",
-#   "cranelift/isle/fuzz",
-#   "cranelift/isle/islec",
-#   "cranelift/serde",
-#   "crates/bench-api",
-#   "crates/c-api",
-#   "crates/cli-flags",
-#   "crates/environ/fuzz",
-#   "crates/jit-icache-coherence",
-#   "crates/winch",
-#   "examples/fib-debug/wasm",
-#   "examples/wasi/wasm",
-#   "examples/tokio/wasm",
-#   "fuzz",
-#   "winch",
-#   "winch/codegen",
-#   "winch/environ"
-# ]
-# exclude = [
-#   'crates/wasi-common/WASI/tools/witx-cli',
-#   'docs/rust_wasi_markdown_parser'
-# ]
+[workspace]
+resolver = '2'
+members = [
+  "cranelift",
+  "cranelift/isle/fuzz",
+  "cranelift/isle/islec",
+  "cranelift/serde",
+  "crates/bench-api",
+  "crates/c-api",
+  "crates/cli-flags",
+  "crates/environ/fuzz",
+  "crates/jit-icache-coherence",
+  "crates/winch",
+  "examples/fib-debug/wasm",
+  "examples/wasi/wasm",
+  "examples/tokio/wasm",
+  "fuzz",
+  "winch",
+  "winch/codegen",
+  "winch/environ"
+]
+exclude = [
+  'crates/wasi-common/WASI/tools/witx-cli',
+  'docs/rust_wasi_markdown_parser'
+]
 
-# [workspace.package]
-# version = "9.0.3"
-# authors = ["The Wasmtime Project Developers"]
-# edition = "2021"
-# rust-version = "1.66.0"
+[workspace.package]
+version = "9.0.3"
+authors = ["The Wasmtime Project Developers"]
+edition = "2021"
+rust-version = "1.66.0"
 
-# [workspace.dependencies]
-# wasmtime = { path = "crates/wasmtime", version = "9.0.3", default-features = false }
-# wasmtime-cache = { path = "crates/cache", version = "=9.0.3" }
-# wasmtime-cli-flags = { path = "crates/cli-flags", version = "=9.0.3" }
-# wasmtime-cranelift = { path = "crates/cranelift", version = "=9.0.3" }
-# wasmtime-cranelift-shared = { path = "crates/cranelift-shared", version = "=9.0.3" }
-# wasmtime-winch = { path = "crates/winch", version = "=9.0.3" }
-# wasmtime-environ = { path = "crates/environ", version = "=9.0.3" }
-# wasmtime-explorer = { path = "crates/explorer", version = "=9.0.3" }
-# wasmtime-fiber = { path = "crates/fiber", version = "=9.0.3" }
-# wasmtime-types = { path = "crates/types", version = "9.0.3" }
-# wasmtime-jit = { path = "crates/jit", version = "=9.0.3" }
-# wasmtime-jit-debug = { path = "crates/jit-debug", version = "=9.0.3" }
-# wasmtime-runtime = { path = "crates/runtime", version = "=9.0.3" }
-# wasmtime-wast = { path = "crates/wast", version = "=9.0.3" }
-# wasmtime-wasi = { path = "crates/wasi", version = "9.0.3" }
-# wasmtime-wasi-crypto = { path = "crates/wasi-crypto", version = "9.0.3" }
-# wasmtime-wasi-nn = { path = "crates/wasi-nn", version = "9.0.3" }
-# wasmtime-wasi-threads = { path = "crates/wasi-threads", version = "9.0.3" }
-# wasmtime-component-util = { path = "crates/component-util", version = "=9.0.3" }
-# wasmtime-component-macro = { path = "crates/component-macro", version = "=9.0.3" }
-# wasmtime-asm-macros = { path = "crates/asm-macros", version = "=9.0.3" }
-# component-test-util = { path = "crates/misc/component-test-util" }
-# component-fuzz-util = { path = "crates/misc/component-fuzz-util" }
-# wiggle = { path = "crates/wiggle", version = "=9.0.3", default-features = false }
-# wiggle-macro = { path = "crates/wiggle/macro", version = "=9.0.3" }
-# wiggle-generate = { path = "crates/wiggle/generate", version = "=9.0.3" }
-# wasi-common = { path = "crates/wasi-common", version = "=9.0.3" }
-# wasi-tokio = { path = "crates/wasi-common/tokio", version = "=9.0.3" }
-# wasi-cap-std-sync = { path = "crates/wasi-common/cap-std-sync", version = "=9.0.3" }
-# wasmtime-fuzzing = { path = "crates/fuzzing" }
-# wasmtime-jit-icache-coherence = { path = "crates/jit-icache-coherence", version = "=9.0.3" }
-# wasmtime-wit-bindgen = { path = "crates/wit-bindgen", version = "=9.0.3" }
+[workspace.dependencies]
+wasmtime = { path = "crates/wasmtime", version = "9.0.3", default-features = false }
+wasmtime-cache = { path = "crates/cache", version = "=9.0.3" }
+wasmtime-cli-flags = { path = "crates/cli-flags", version = "=9.0.3" }
+wasmtime-cranelift = { path = "crates/cranelift", version = "=9.0.3" }
+wasmtime-cranelift-shared = { path = "crates/cranelift-shared", version = "=9.0.3" }
+wasmtime-winch = { path = "crates/winch", version = "=9.0.3" }
+wasmtime-environ = { path = "crates/environ", version = "=9.0.3" }
+wasmtime-explorer = { path = "crates/explorer", version = "=9.0.3" }
+wasmtime-fiber = { path = "crates/fiber", version = "=9.0.3" }
+wasmtime-types = { path = "crates/types", version = "9.0.3" }
+wasmtime-jit = { path = "crates/jit", version = "=9.0.3" }
+wasmtime-jit-debug = { path = "crates/jit-debug", version = "=9.0.3" }
+wasmtime-runtime = { path = "crates/runtime", version = "=9.0.3" }
+wasmtime-wast = { path = "crates/wast", version = "=9.0.3" }
+wasmtime-wasi = { path = "crates/wasi", version = "9.0.3" }
+wasmtime-wasi-crypto = { path = "crates/wasi-crypto", version = "9.0.3" }
+wasmtime-wasi-nn = { path = "crates/wasi-nn", version = "9.0.3" }
+wasmtime-wasi-threads = { path = "crates/wasi-threads", version = "9.0.3" }
+wasmtime-component-util = { path = "crates/component-util", version = "=9.0.3" }
+wasmtime-component-macro = { path = "crates/component-macro", version = "=9.0.3" }
+wasmtime-asm-macros = { path = "crates/asm-macros", version = "=9.0.3" }
+component-test-util = { path = "crates/misc/component-test-util" }
+component-fuzz-util = { path = "crates/misc/component-fuzz-util" }
+wiggle = { path = "crates/wiggle", version = "=9.0.3", default-features = false }
+wiggle-macro = { path = "crates/wiggle/macro", version = "=9.0.3" }
+wiggle-generate = { path = "crates/wiggle/generate", version = "=9.0.3" }
+wasi-common = { path = "crates/wasi-common", version = "=9.0.3" }
+wasi-tokio = { path = "crates/wasi-common/tokio", version = "=9.0.3" }
+wasi-cap-std-sync = { path = "crates/wasi-common/cap-std-sync", version = "=9.0.3" }
+wasmtime-fuzzing = { path = "crates/fuzzing" }
+wasmtime-jit-icache-coherence = { path = "crates/jit-icache-coherence", version = "=9.0.3" }
+wasmtime-wit-bindgen = { path = "crates/wit-bindgen", version = "=9.0.3" }
 
-# cranelift-wasm = { path = "cranelift/wasm", version = "0.96.3" }
-# cranelift-codegen = { path = "cranelift/codegen", version = "0.96.3" }
-# cranelift-frontend = { path = "cranelift/frontend", version = "0.96.3" }
-# cranelift-entity = { path = "cranelift/entity", version = "0.96.3" }
-# cranelift-native = { path = "cranelift/native", version = "0.96.3" }
-# cranelift-module = { path = "cranelift/module", version = "0.96.3" }
-# cranelift-interpreter = { path = "cranelift/interpreter", version = "0.96.3" }
-# cranelift-reader = { path = "cranelift/reader", version = "0.96.3" }
-# cranelift-filetests = { path = "cranelift/filetests" }
-# cranelift-object = { path = "cranelift/object", version = "0.96.3" }
-# cranelift-jit = { path = "cranelift/jit", version = "0.96.3" }
-# cranelift-fuzzgen = { path = "cranelift/fuzzgen" }
-# cranelift-bforest = { path = "cranelift/bforest", version = "0.96.3" }
-# cranelift-control = { path = "cranelift/control", version = "0.96.3" }
-# cranelift = { path = "cranelift/umbrella", version = "0.96.3" }
+cranelift-wasm = { path = "cranelift/wasm", version = "0.96.3" }
+cranelift-codegen = { path = "cranelift/codegen", version = "0.96.3" }
+cranelift-frontend = { path = "cranelift/frontend", version = "0.96.3" }
+cranelift-entity = { path = "cranelift/entity", version = "0.96.3" }
+cranelift-native = { path = "cranelift/native", version = "0.96.3" }
+cranelift-module = { path = "cranelift/module", version = "0.96.3" }
+cranelift-interpreter = { path = "cranelift/interpreter", version = "0.96.3" }
+cranelift-reader = { path = "cranelift/reader", version = "0.96.3" }
+cranelift-filetests = { path = "cranelift/filetests" }
+cranelift-object = { path = "cranelift/object", version = "0.96.3" }
+cranelift-jit = { path = "cranelift/jit", version = "0.96.3" }
+cranelift-fuzzgen = { path = "cranelift/fuzzgen" }
+cranelift-bforest = { path = "cranelift/bforest", version = "0.96.3" }
+cranelift-control = { path = "cranelift/control", version = "0.96.3" }
+cranelift = { path = "cranelift/umbrella", version = "0.96.3" }
 
-# wasmtime-wasi-http = { path = "crates/wasi-http", version = "=9.0.3" }
+wasmtime-wasi-http = { path = "crates/wasi-http", version = "=9.0.3" }
 
-# winch-codegen = { path = "winch/codegen", version = "=0.7.3" }
-# winch-environ = { path = "winch/environ", version = "=0.7.3" }
-# winch-filetests = { path = "winch/filetests" }
-# winch-test-macros = { path = "winch/test-macros" }
+winch-codegen = { path = "winch/codegen", version = "=0.7.3" }
+winch-environ = { path = "winch/environ", version = "=0.7.3" }
+winch-filetests = { path = "winch/filetests" }
+winch-test-macros = { path = "winch/test-macros" }
 
-# target-lexicon = { version = "0.12.3", default-features = false, features = ["std"] }
-# anyhow = "1.0.22"
-# wasmparser = "0.103.0"
-# wat = "1.0.62"
-# wast = "56.0.0"
-# wasmprinter = "0.2.55"
-# wasm-encoder = "0.25.0"
-# wasm-smith = "0.12.6"
-# wasm-mutate = "0.2.23"
-# wit-parser = "0.7.0"
-# windows-sys = "0.48.0"
-# env_logger = "0.10"
-# rustix = "0.37.13"
-# log = { version = "0.4.8", default-features = false }
-# object = { version = "0.30.3", default-features = false, features = ['read_core', 'elf', 'std'] }
-# gimli = { version = "0.27.0", default-features = false, features = ['read', 'std'] }
-# clap = { version = "3.2.0", features = ["color", "suggestions", "derive"] }
-# hashbrown = "0.13.2"
-# cap-std = "1.0.0"
-# cap-rand = "1.0.0"
-# capstone = "0.9.0"
-# once_cell = "1.12.0"
-# smallvec = { version = "1.6.1", features = ["union"] }
-# io-lifetimes = { version = "1.0.0", default-features = false }
-# tracing = "0.1.26"
-# bitflags = "1.2"
-# thiserror = "1.0.15"
-# async-trait = "0.1.42"
-# heck = "0.4"
-# similar = "2.1.0"
-# toml = "0.5.9"
-# serde = "1.0.94"
-# serde_json = "1.0.80"
-# glob = "0.3.0"
-# libfuzzer-sys = "0.4.0"
-# regalloc2 = "0.8.1"
-# walkdir = "2.3.3"
+target-lexicon = { version = "0.12.3", default-features = false, features = ["std"] }
+anyhow = "1.0.22"
+wasmparser = "0.103.0"
+wat = "1.0.62"
+wast = "56.0.0"
+wasmprinter = "0.2.55"
+wasm-encoder = "0.25.0"
+wasm-smith = "0.12.6"
+wasm-mutate = "0.2.23"
+wit-parser = "0.7.0"
+windows-sys = "0.48.0"
+env_logger = "0.10"
+rustix = "0.37.13"
+log = { version = "0.4.19", default-features = false }
+object = { version = "0.30.3", default-features = false, features = ['read_core', 'elf', 'std'] }
+gimli = { version = "0.27.0", default-features = false, features = ['read', 'std'] }
+clap = { version = "3.2.0", features = ["color", "suggestions", "derive"] }
+hashbrown = "0.13.2"
+cap-std = "1.0.0"
+cap-rand = "1.0.0"
+capstone = "0.9.0"
+once_cell = "1.12.0"
+smallvec = { version = "1.6.1", features = ["union"] }
+io-lifetimes = { version = "1.0.0", default-features = false }
+tracing = "0.1.26"
+bitflags = "1.2"
+thiserror = "1.0.15"
+async-trait = "0.1.42"
+heck = "0.4"
+similar = "2.1.0"
+toml = "0.5.9"
+serde = "1.0.94"
+serde_json = "1.0.80"
+glob = "0.3.0"
+libfuzzer-sys = "0.4.0"
+regalloc2 = "0.8.1"
+walkdir = "2.3.3"
 
 [features]
 default = [

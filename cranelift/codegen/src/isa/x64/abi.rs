@@ -24,7 +24,7 @@ static STACK_ARG_RET_SIZE_LIMIT: u32 = 128 * 1024 * 1024;
 pub(crate) type X64Callee = Callee<X64ABIMachineSpec>;
 
 /// Support for the x64 ABI from the caller side (at a callsite).
-pub(crate) type X64Caller = Caller<X64ABIMachineSpec>;
+pub(crate) type X64CallSite = CallSite<X64ABIMachineSpec>;
 
 /// Implementation of ABI primitives for x64.
 pub struct X64ABIMachineSpec;
@@ -301,8 +301,9 @@ impl ABIMachineSpec for X64ABIMachineSpec {
         _setup_frame: bool,
         _isa_flags: &x64_settings::Flags,
         rets: Vec<RetPair>,
+        stack_bytes_to_pop: u32,
     ) -> Self::I {
-        Inst::ret(rets)
+        Inst::ret(rets, stack_bytes_to_pop)
     }
 
     fn gen_add_imm(into_reg: Writable<Reg>, from_reg: Reg, imm: u32) -> SmallInstVec<Self::I> {
@@ -604,6 +605,7 @@ impl ABIMachineSpec for X64ABIMachineSpec {
                     dst: tmp,
                     name: Box::new(name.clone()),
                     offset: 0,
+                    distance: RelocDistance::Far,
                 });
                 insts.push(Inst::call_unknown(
                     RegMem::reg(tmp.to_reg()),
@@ -647,6 +649,7 @@ impl ABIMachineSpec for X64ABIMachineSpec {
             dst: temp2,
             name: Box::new(ExternalName::LibCall(LibCall::Memcpy)),
             offset: 0,
+            distance: RelocDistance::Far,
         });
         insts.push(Inst::call_unknown(
             RegMem::reg(temp2.to_reg()),
@@ -672,7 +675,11 @@ impl ABIMachineSpec for X64ABIMachineSpec {
         insts
     }
 
-    fn get_number_of_spillslots_for_value(rc: RegClass, vector_scale: u32) -> u32 {
+    fn get_number_of_spillslots_for_value(
+        rc: RegClass,
+        vector_scale: u32,
+        _isa_flags: &Self::F,
+    ) -> u32 {
         // We allocate in terms of 8-byte slots.
         match rc {
             RegClass::Int => 1,

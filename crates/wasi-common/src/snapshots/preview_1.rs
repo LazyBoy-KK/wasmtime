@@ -532,7 +532,7 @@ impl wasi_snapshot_preview1::WasiSnapshotPreview1 for WasiCtx {
                 .ok_or_else(|| Error::not_supported())?
                 .as_bytes();
             let path_len = path_bytes.len();
-            if path_len < path_max_len as usize {
+            if path_len > path_max_len as usize {
                 return Err(Error::name_too_long());
             }
             path.as_array(path_len as u32).copy_from_slice(path_bytes)?;
@@ -1247,9 +1247,16 @@ impl From<types::Advice> for Advice {
 
 impl From<&FdStat> for types::Fdstat {
     fn from(fdstat: &FdStat) -> types::Fdstat {
+        let mut fs_rights_base = types::Rights::empty();
+        if fdstat.access_mode.contains(FileAccessMode::READ) {
+            fs_rights_base |= types::Rights::FD_READ;
+        }
+        if fdstat.access_mode.contains(FileAccessMode::WRITE) {
+            fs_rights_base |= types::Rights::FD_WRITE;
+        }
         types::Fdstat {
             fs_filetype: types::Filetype::from(&fdstat.filetype),
-            fs_rights_base: types::Rights::empty(),
+            fs_rights_base,
             fs_rights_inheriting: types::Rights::empty(),
             fs_flags: types::Fdflags::from(fdstat.flags),
         }

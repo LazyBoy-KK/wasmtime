@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-#[cfg(any(feature = "cache", compiler))]
+#[cfg(any(feature = "cache", feature = "cranelift", feature = "winch"))]
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ use wasmparser::WasmFeatures;
 #[cfg(feature = "cache")]
 use wasmtime_cache::CacheConfig;
 use wasmtime_environ::Tunables;
-use wasmtime_jit::{JitDumpAgent, NullProfilerAgent, PerfMapAgent, ProfilingAgent, VTuneAgent};
+use wasmtime_jit::profiling::{self, ProfilingAgent};
 use wasmtime_runtime::{InstanceAllocator, OnDemandInstanceAllocator, RuntimeMemoryCreator};
 
 pub use wasmtime_environ::CacheStore;
@@ -68,6 +68,16 @@ impl Default for ModuleVersionStrategy {
     }
 }
 
+impl std::hash::Hash for ModuleVersionStrategy {
+    fn hash<H: std::hash::Hasher>(&self, hasher: &mut H) {
+        match self {
+            Self::WasmtimeVersion => env!("CARGO_PKG_VERSION").hash(hasher),
+            Self::Custom(s) => s.hash(hasher),
+            Self::None => {}
+        };
+    }
+}
+
 /// Global configuration options used to create an [`Engine`](crate::Engine)
 /// and customize its behavior.
 ///
@@ -78,7 +88,7 @@ impl Default for ModuleVersionStrategy {
 /// a problematic config may cause `Engine::new` to fail.
 #[derive(Clone)]
 pub struct Config {
-    #[cfg(compiler)]
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
     compiler_config: CompilerConfig,
     profiling_strategy: ProfilingStrategy,
 
@@ -103,19 +113,19 @@ pub struct Config {
 }
 
 /// User-provided configuration for the compiler.
-#[cfg(compiler)]
+#[cfg(any(feature = "cranelift", feature = "winch"))]
 #[derive(Debug, Clone)]
 struct CompilerConfig {
     strategy: Strategy,
     target: Option<target_lexicon::Triple>,
     settings: HashMap<String, String>,
     flags: HashSet<String>,
-    #[cfg(compiler)]
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
     cache_store: Option<Arc<dyn CacheStore>>,
     clif_dir: Option<std::path::PathBuf>,
 }
 
-#[cfg(compiler)]
+#[cfg(any(feature = "cranelift", feature = "winch"))]
 impl CompilerConfig {
     fn new(strategy: Strategy) -> Self {
         Self {
@@ -148,7 +158,7 @@ impl CompilerConfig {
     }
 }
 
-#[cfg(compiler)]
+#[cfg(any(feature = "cranelift", feature = "winch"))]
 impl Default for CompilerConfig {
     fn default() -> Self {
         Self::new(Strategy::Auto)
@@ -161,7 +171,7 @@ impl Config {
     pub fn new() -> Self {
         let mut ret = Self {
             tunables: Tunables::default(),
-            #[cfg(compiler)]
+            #[cfg(any(feature = "cranelift", feature = "winch"))]
             compiler_config: CompilerConfig::default(),
             #[cfg(feature = "cache")]
             cache_config: CacheConfig::new_cache_disabled(),
@@ -190,7 +200,7 @@ impl Config {
             memory_guaranteed_dense_image_size: 16 << 20,
             force_memory_init_memfd: false,
         };
-        #[cfg(compiler)]
+        #[cfg(any(feature = "cranelift", feature = "winch"))]
         {
             ret.cranelift_debug_verifier(false);
             ret.cranelift_opt_level(OptLevel::Speed);
@@ -221,8 +231,8 @@ impl Config {
     /// # Errors
     ///
     /// This method will error if the given target triple is not supported.
-    #[cfg(compiler)]
-    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))] // see build.rs
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
+    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))]
     pub fn target(&mut self, target: &str) -> Result<&mut Self> {
         self.compiler_config.target =
             Some(target_lexicon::Triple::from_str(target).map_err(|e| anyhow::anyhow!(e))?);
@@ -663,6 +673,22 @@ impl Config {
         self
     }
 
+    /// Configures whether the [WebAssembly function references proposal][proposal]
+    /// will be enabled for compilation.
+    ///
+    /// This feature gates non-nullable reference types, function reference
+    /// types, call_ref, ref.func, and non-nullable reference related instructions.
+    ///
+    /// Note that the function references proposal depends on the reference types proposal.
+    ///
+    /// This feature is `false` by default.
+    ///
+    /// [proposal]: https://github.com/WebAssembly/function-references
+    pub fn wasm_function_references(&mut self, enable: bool) -> &mut Self {
+        self.features.function_references = enable;
+        self
+    }
+
     /// Configures whether the WebAssembly SIMD proposal will be
     /// enabled for compilation.
     ///
@@ -820,8 +846,8 @@ impl Config {
     /// and its documentation.
     ///
     /// The default value for this is `Strategy::Auto`.
-    #[cfg(compiler)]
-    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))] // see build.rs
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
+    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))]
     pub fn strategy(&mut self, strategy: Strategy) -> &mut Self {
         self.compiler_config.strategy = strategy;
         self
@@ -854,8 +880,8 @@ impl Config {
     /// developers of wasmtime itself.
     ///
     /// The default value for this is `false`
-    #[cfg(compiler)]
-    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))] // see build.rs
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
+    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))]
     pub fn cranelift_debug_verifier(&mut self, enable: bool) -> &mut Self {
         let val = if enable { "true" } else { "false" };
         self.compiler_config
@@ -871,8 +897,8 @@ impl Config {
     /// more information see the documentation of [`OptLevel`].
     ///
     /// The default value for this is `OptLevel::None`.
-    #[cfg(compiler)]
-    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))] // see build.rs
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
+    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))]
     pub fn cranelift_opt_level(&mut self, level: OptLevel) -> &mut Self {
         let val = match level {
             OptLevel::None => "none",
@@ -893,8 +919,8 @@ impl Config {
     /// This is not required by the WebAssembly spec, so it is not enabled by default.
     ///
     /// The default value for this is `false`
-    #[cfg(compiler)]
-    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))] // see build.rs
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
+    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))]
     pub fn cranelift_nan_canonicalization(&mut self, enable: bool) -> &mut Self {
         let val = if enable { "true" } else { "false" };
         self.compiler_config
@@ -919,8 +945,8 @@ impl Config {
     /// The validation of the flags are deferred until the engine is being built, and thus may
     /// cause `Engine::new` fail if the flag's name does not exist, or the value is not appropriate
     /// for the flag type.
-    #[cfg(compiler)]
-    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))] // see build.rs
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
+    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))]
     pub unsafe fn cranelift_flag_enable(&mut self, flag: &str) -> &mut Self {
         self.compiler_config.flags.insert(flag.to_string());
         self
@@ -945,8 +971,8 @@ impl Config {
     ///
     /// For example, feature `wasm_backtrace` will set `unwind_info` to `true`, but if it's
     /// manually set to false then it will fail.
-    #[cfg(compiler)]
-    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))] // see build.rs
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
+    #[cfg_attr(nightlydoc, doc(cfg(any(feature = "cranelift", feature = "winch"))))]
     pub unsafe fn cranelift_flag_set(&mut self, name: &str, value: &str) -> &mut Self {
         self.compiler_config
             .settings
@@ -1513,14 +1539,14 @@ impl Config {
 
     pub(crate) fn build_profiler(&self) -> Result<Box<dyn ProfilingAgent>> {
         Ok(match self.profiling_strategy {
-            ProfilingStrategy::PerfMap => Box::new(PerfMapAgent::new()?) as Box<dyn ProfilingAgent>,
-            ProfilingStrategy::JitDump => Box::new(JitDumpAgent::new()?) as Box<dyn ProfilingAgent>,
-            ProfilingStrategy::VTune => Box::new(VTuneAgent::new()?) as Box<dyn ProfilingAgent>,
-            ProfilingStrategy::None => Box::new(NullProfilerAgent),
+            ProfilingStrategy::PerfMap => profiling::new_perfmap()?,
+            ProfilingStrategy::JitDump => profiling::new_jitdump()?,
+            ProfilingStrategy::VTune => profiling::new_vtune()?,
+            ProfilingStrategy::None => profiling::new_null(),
         })
     }
 
-    #[cfg(compiler)]
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub(crate) fn build_compiler(mut self) -> Result<(Self, Box<dyn wasmtime_environ::Compiler>)> {
         let mut compiler = match self.compiler_config.strategy {
             #[cfg(feature = "cranelift")]
@@ -1632,7 +1658,7 @@ impl Config {
     }
 
     /// Enables clif output when compiling a WebAssembly module.
-    #[cfg(compiler)]
+    #[cfg(any(feature = "cranelift", feature = "winch"))]
     pub fn emit_clif(&mut self, path: &Path) {
         self.compiler_config.clif_dir = Some(path.to_path_buf());
     }
@@ -1659,6 +1685,10 @@ impl fmt::Debug for Config {
             .field("parse_wasm_debuginfo", &self.tunables.parse_wasm_debuginfo)
             .field("wasm_threads", &self.features.threads)
             .field("wasm_reference_types", &self.features.reference_types)
+            .field(
+                "wasm_function_references",
+                &self.features.function_references,
+            )
             .field("wasm_bulk_memory", &self.features.bulk_memory)
             .field("wasm_simd", &self.features.simd)
             .field("wasm_relaxed_simd", &self.features.relaxed_simd)
@@ -1681,7 +1711,7 @@ impl fmt::Debug for Config {
                 &self.tunables.guard_before_linear_memory,
             )
             .field("parallel_compilation", &self.parallel_compilation);
-        #[cfg(compiler)]
+        #[cfg(any(feature = "cranelift", feature = "winch"))]
         {
             f.field("compiler_config", &self.compiler_config);
         }

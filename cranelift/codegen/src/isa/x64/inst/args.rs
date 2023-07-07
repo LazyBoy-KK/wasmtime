@@ -533,7 +533,7 @@ impl SyntheticAmode {
         }
     }
 
-    pub(crate) fn finalize(&self, state: &mut EmitState, buffer: &MachBuffer<Inst>) -> Amode {
+    pub(crate) fn finalize(&self, state: &mut EmitState, buffer: &mut MachBuffer<Inst>) -> Amode {
         match self {
             SyntheticAmode::Real(addr) => addr.clone(),
             SyntheticAmode::NominalSPOffset { simm32 } => {
@@ -902,6 +902,24 @@ impl fmt::Debug for UnaryRmROpcode {
 impl fmt::Display for UnaryRmROpcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
+    }
+}
+
+pub use crate::isa::x64::lower::isle::generated_code::UnaryRmRVexOpcode;
+
+impl UnaryRmRVexOpcode {
+    pub(crate) fn available_from(&self) -> SmallVec<[InstructionSet; 2]> {
+        match self {
+            UnaryRmRVexOpcode::Blsi | UnaryRmRVexOpcode::Blsmsk | UnaryRmRVexOpcode::Blsr => {
+                smallvec![InstructionSet::BMI1]
+            }
+        }
+    }
+}
+
+impl fmt::Display for UnaryRmRVexOpcode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&format!("{self:?}").to_lowercase())
     }
 }
 
@@ -1749,24 +1767,26 @@ impl fmt::Display for AvxOpcode {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)]
 #[allow(missing_docs)]
-pub enum Avx512Opcode {
-    Vcvtudq2ps,
-    Vpabsq,
-    Vpermi2b,
-    Vpmullq,
-    Vpopcntb,
+pub enum Avx512TupleType {
+    Full,
+    FullMem,
+    Mem128,
 }
+
+pub use crate::isa::x64::lower::isle::generated_code::Avx512Opcode;
 
 impl Avx512Opcode {
     /// Which `InstructionSet`s support the opcode?
     pub(crate) fn available_from(&self) -> SmallVec<[InstructionSet; 2]> {
         match self {
-            Avx512Opcode::Vcvtudq2ps => {
+            Avx512Opcode::Vcvtudq2ps
+            | Avx512Opcode::Vpabsq
+            | Avx512Opcode::Vpsraq
+            | Avx512Opcode::VpsraqImm => {
                 smallvec![InstructionSet::AVX512F, InstructionSet::AVX512VL]
             }
-            Avx512Opcode::Vpabsq => smallvec![InstructionSet::AVX512F, InstructionSet::AVX512VL],
             Avx512Opcode::Vpermi2b => {
                 smallvec![InstructionSet::AVX512VL, InstructionSet::AVX512VBMI]
             }
@@ -1776,24 +1796,29 @@ impl Avx512Opcode {
             }
         }
     }
-}
 
-impl fmt::Debug for Avx512Opcode {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        let name = match self {
-            Avx512Opcode::Vcvtudq2ps => "vcvtudq2ps",
-            Avx512Opcode::Vpabsq => "vpabsq",
-            Avx512Opcode::Vpermi2b => "vpermi2b",
-            Avx512Opcode::Vpmullq => "vpmullq",
-            Avx512Opcode::Vpopcntb => "vpopcntb",
-        };
-        write!(fmt, "{}", name)
+    /// What is the "TupleType" of this opcode, which affects the scaling factor
+    /// for 8-bit displacements when this instruction uses memory operands.
+    ///
+    /// This can be found in the encoding table for each instruction and is
+    /// interpreted according to Table 2-34 and 2-35 in the Intel instruction
+    /// manual.
+    pub fn tuple_type(&self) -> Avx512TupleType {
+        use Avx512Opcode::*;
+        use Avx512TupleType::*;
+
+        match self {
+            Vcvtudq2ps | Vpabsq | Vpmullq | VpsraqImm => Full,
+            Vpermi2b | Vpopcntb => FullMem,
+            Vpsraq => Mem128,
+        }
     }
 }
 
 impl fmt::Display for Avx512Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
+        let s = format!("{self:?}");
+        f.write_str(&s.to_lowercase())
     }
 }
 

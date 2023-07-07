@@ -224,7 +224,11 @@ pub(crate) struct FileEntry {
 }
 
 bitflags! {
+<<<<<<< HEAD
     pub(crate) struct FileAccessMode : u32 {
+=======
+    pub struct FileAccessMode : u32 {
+>>>>>>> v10.0.1
         const READ = 0b1;
         const WRITE= 0b10;
     }
@@ -239,6 +243,7 @@ impl FileEntry {
         Ok(FdStat {
             filetype: self.file.get_filetype().await?,
             flags: self.file.get_fdflags().await?,
+            access_mode: self.access_mode,
         })
     }
 }
@@ -247,6 +252,7 @@ impl FileEntry {
 pub struct FdStat {
     pub filetype: FileType,
     pub flags: FdFlags,
+    pub access_mode: FileAccessMode,
 }
 
 #[derive(Debug, Clone)]

@@ -11,7 +11,7 @@ use std::thread;
 use std::time::Duration;
 use wasmtime::{
     AsContextMut, Engine, Func, GuestProfiler, Linker, Module, Store, StoreLimits,
-    StoreLimitsBuilder, Val, ValType,
+    StoreLimitsBuilder, UpdateDeadline, Val, ValType,
 };
 use wasmtime_cli_flags::{CommonOptions, WasiModules};
 use wasmtime_wasi::maybe_exit_on_error;
@@ -467,12 +467,12 @@ impl RunCommand {
                     if timeout == 0 {
                         bail!("timeout exceeded");
                     }
-                    Ok(1)
+                    Ok(UpdateDeadline::Continue(1))
                 });
             } else {
                 store.epoch_deadline_callback(move |mut store| {
                     sample(&mut store);
-                    Ok(1)
+                    Ok(UpdateDeadline::Continue(1))
                 });
             }
 
@@ -831,31 +831,31 @@ fn generate_coredump(err: &anyhow::Error, source_name: &str, coredump_path: &str
         .downcast_ref::<wasmtime::WasmBacktrace>()
         .ok_or_else(|| anyhow!("no wasm backtrace found to generate coredump with"))?;
 
-    let mut coredump_builder =
-        wasm_coredump_builder::CoredumpBuilder::new().executable_name(source_name);
-
-    {
-        let mut thread_builder = wasm_coredump_builder::ThreadBuilder::new().thread_name("main");
-
-        for frame in bt.frames() {
-            let coredump_frame = wasm_coredump_builder::FrameBuilder::new()
-                .codeoffset(frame.func_offset().unwrap_or(0) as u32)
-                .funcidx(frame.func_index())
-                .build();
-            thread_builder.add_frame(coredump_frame);
-        }
-
-        coredump_builder.add_thread(thread_builder.build());
+    let coredump = wasm_encoder::CoreDumpSection::new(source_name);
+    let mut stacksection = wasm_encoder::CoreDumpStackSection::new("main");
+    for f in bt.frames() {
+        // We don't have the information at this point to map frames to
+        // individual instances of a module, so we won't be able to create the
+        // "frame ∈ instance ∈ module" hierarchy described in the core dump spec
+        // until we move core dump generation into the runtime. So for now
+        // instanceidx will be 0 for all frames
+        let instanceidx = 0;
+        stacksection.frame(
+            instanceidx,
+            f.func_index(),
+            u32::try_from(f.func_offset().unwrap_or(0)).unwrap(),
+            // We don't currently have access to locals/stack values
+            [],
+            [],
+        );
     }
-
-    let coredump = coredump_builder
-        .serialize()
-        .map_err(|err| anyhow!("failed to serialize coredump: {}", err))?;
+    let mut module = wasm_encoder::Module::new();
+    module.section(&coredump);
+    module.section(&stacksection);
 
     let mut f = File::create(coredump_path)
         .context(format!("failed to create file at `{}`", coredump_path))?;
-    f.write_all(&coredump)
+    f.write_all(module.as_slice())
         .with_context(|| format!("failed to write coredump file at `{}`", coredump_path))?;
-
     Ok(())
 }

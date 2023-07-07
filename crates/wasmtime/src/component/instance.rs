@@ -13,7 +13,7 @@ use wasmtime_environ::component::{
     ExtractPostReturn, ExtractRealloc, GlobalInitializer, InstantiateModule, LowerImport,
     RuntimeImportIndex, RuntimeInstanceIndex, RuntimeModuleIndex, Transcoder,
 };
-use wasmtime_environ::{EntityIndex, EntityType, Global, GlobalInit, PrimaryMap, WasmType};
+use wasmtime_environ::{EntityIndex, EntityType, Global, PrimaryMap, WasmType};
 use wasmtime_runtime::component::{ComponentInstance, OwnedComponentInstance};
 
 use super::component::AllCallFuncPointers;
@@ -140,7 +140,6 @@ impl InstanceData {
                     global: Global {
                         wasm_ty: WasmType::I32,
                         mutability: true,
-                        initializer: GlobalInit::I32Const(0),
                     },
                 })
             }
@@ -654,7 +653,7 @@ impl<'a, 'store> ExportInstance<'a, 'store> {
         }
     }
 
-    // #[cfg(feature = "quickjs-libc")]
+    #[cfg(feature = "quickjs-libc")]
     /// return funcs
     pub fn funcs(&'a mut self) -> impl Iterator<Item = (String, Func)> + 'a {
         self.exports.iter().filter_map(|(name, export)| {

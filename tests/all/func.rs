@@ -416,7 +416,7 @@ fn dtor_runs() {
     let a = A;
     assert_eq!(HITS.load(SeqCst), 0);
     Func::wrap(&mut store, move || {
-        drop(&a);
+        let _ = &a;
     });
     drop(store);
     assert_eq!(HITS.load(SeqCst), 1);
@@ -436,7 +436,9 @@ fn dtor_delayed() -> Result<()> {
 
     let mut store = Store::<()>::default();
     let a = A;
-    let func = Func::wrap(&mut store, move || drop(&a));
+    let func = Func::wrap(&mut store, move || {
+        let _ = &a;
+    });
 
     assert_eq!(HITS.load(SeqCst), 0);
     let wasm = wat::parse_str(r#"(import "" "" (func))"#)?;
@@ -993,7 +995,7 @@ fn trap_doesnt_leak() -> anyhow::Result<()> {
     let canary1 = Canary::default();
     let dtor1_run = canary1.0.clone();
     let f1 = Func::wrap(&mut store, move || -> Result<()> {
-        drop(&canary1);
+        let _ = &canary1;
         bail!("")
     });
     assert!(f1.typed::<(), ()>(&store)?.call(&mut store, ()).is_err());
@@ -1003,7 +1005,7 @@ fn trap_doesnt_leak() -> anyhow::Result<()> {
     let canary2 = Canary::default();
     let dtor2_run = canary2.0.clone();
     let f2 = Func::new(&mut store, FuncType::new(None, None), move |_, _, _| {
-        drop(&canary2);
+        let _ = &canary2;
         bail!("")
     });
     assert!(f2.typed::<(), ()>(&store)?.call(&mut store, ()).is_err());
@@ -1304,6 +1306,119 @@ fn typed_funcs_count_params_correctly_in_error_messages() -> anyhow::Result<()> 
             assert!(dbg!(msg).contains("expected 3 types, found 2"))
         }
     }
+
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn calls_with_funcref_and_externref() -> anyhow::Result<()> {
+    let mut store = Store::<()>::default();
+    let module = Module::new(
+        store.engine(),
+        r#"
+            (module
+                (import "" "witness" (func $witness (param funcref externref)))
+                (func (export "f") (param funcref externref) (result externref funcref)
+                    local.get 0
+                    local.get 1
+                    call $witness
+                    local.get 1
+                    local.get 0
+                )
+            )
+
+        "#,
+    )?;
+    let mut linker = Linker::new(store.engine());
+    linker.func_wrap(
+        "",
+        "witness",
+        |mut caller: Caller<'_, ()>, func: Option<Func>, externref: Option<ExternRef>| {
+            if func.is_some() {
+                assert_my_funcref(&mut caller, func.as_ref())?;
+            }
+            if externref.is_some() {
+                assert_my_externref(externref.as_ref());
+            }
+            Ok(())
+        },
+    )?;
+    let instance = linker.instantiate(&mut store, &module)?;
+
+    let typed = instance
+        .get_typed_func::<(Option<Func>, Option<ExternRef>), (Option<ExternRef>, Option<Func>)>(
+            &mut store, "f",
+        )?;
+    let untyped = typed.func();
+
+    let my_funcref = Func::wrap(&mut store, || 100u32);
+    let my_externref = ExternRef::new(99u32);
+    let mut results = [Val::I32(0), Val::I32(0)];
+
+    fn assert_my_funcref(mut store: impl AsContextMut, func: Option<&Func>) -> Result<()> {
+        let mut store = store.as_context_mut();
+        let func = func.unwrap();
+        assert_eq!(func.typed::<(), u32>(&store)?.call(&mut store, ())?, 100);
+        Ok(())
+    }
+    fn assert_my_externref(externref: Option<&ExternRef>) {
+        assert_eq!(externref.unwrap().data().downcast_ref(), Some(&99u32));
+    }
+
+    // funcref=null, externref=null
+    let (a, b) = typed.call(&mut store, (None, None))?;
+    assert!(a.is_none());
+    assert!(b.is_none());
+    untyped.call(
+        &mut store,
+        &[Val::FuncRef(None), Val::ExternRef(None)],
+        &mut results,
+    )?;
+    assert!(results[0].unwrap_externref().is_none());
+    assert!(results[1].unwrap_funcref().is_none());
+
+    // funcref=Some, externref=null
+    let (a, b) = typed.call(&mut store, (Some(my_funcref), None))?;
+    assert!(a.is_none());
+    assert_my_funcref(&mut store, b.as_ref())?;
+    untyped.call(
+        &mut store,
+        &[Val::FuncRef(Some(my_funcref)), Val::ExternRef(None)],
+        &mut results,
+    )?;
+    assert!(results[0].unwrap_externref().is_none());
+    assert_my_funcref(&mut store, results[1].unwrap_funcref())?;
+
+    // funcref=null, externref=Some
+    let (a, b) = typed.call(&mut store, (None, Some(my_externref.clone())))?;
+    assert_my_externref(a.as_ref());
+    assert!(b.is_none());
+    untyped.call(
+        &mut store,
+        &[
+            Val::FuncRef(None),
+            Val::ExternRef(Some(my_externref.clone())),
+        ],
+        &mut results,
+    )?;
+    assert_my_externref(results[0].unwrap_externref().as_ref());
+    assert!(results[1].unwrap_funcref().is_none());
+
+    // funcref=Some, externref=Some
+    let (a, b) = typed.call(&mut store, (Some(my_funcref), Some(my_externref.clone())))?;
+    assert_my_externref(a.as_ref());
+    assert_my_funcref(&mut store, b.as_ref())?;
+    untyped.call(
+        &mut store,
+        &[
+            Val::FuncRef(Some(my_funcref)),
+            Val::ExternRef(Some(my_externref.clone())),
+        ],
+        &mut results,
+    )?;
+    assert_my_externref(results[0].unwrap_externref().as_ref());
+    assert_my_funcref(&mut store, results[1].unwrap_funcref())?;
 
     Ok(())
 }

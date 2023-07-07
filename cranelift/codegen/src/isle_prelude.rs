@@ -228,6 +228,16 @@ macro_rules! isle_common_prelude_methods {
         }
 
         #[inline]
+        fn ty_lane_mask(&mut self, ty: Type) -> u64 {
+            let ty_lane_count = ty.lane_count();
+            debug_assert_ne!(ty_lane_count, 0);
+            let shift = 64_u64
+                .checked_sub(ty_lane_count.into())
+                .expect("unimplemented for > 64 bits");
+            u64::MAX >> shift
+        }
+
+        #[inline]
         fn ty_umin(&mut self, _ty: Type) -> u64 {
             0
         }
@@ -371,6 +381,15 @@ macro_rules! isle_common_prelude_methods {
         #[inline]
         fn ty_int(&mut self, ty: Type) -> Option<Type> {
             ty.is_int().then(|| ty)
+        }
+
+        #[inline]
+        fn ty_scalar(&mut self, ty: Type) -> Option<Type> {
+            if ty.lane_count() == 1 {
+                Some(ty)
+            } else {
+                None
+            }
         }
 
         #[inline]
@@ -613,6 +632,16 @@ macro_rules! isle_common_prelude_methods {
         }
 
         #[inline]
+        fn u32_sub(&mut self, a: u32, b: u32) -> u32 {
+            a.wrapping_sub(b)
+        }
+
+        #[inline]
+        fn u32_and(&mut self, a: u32, b: u32) -> u32 {
+            a & b
+        }
+
+        #[inline]
         fn s32_add_fallible(&mut self, a: u32, b: u32) -> Option<u32> {
             let a = a as i32;
             let b = b as i32;
@@ -688,6 +717,16 @@ macro_rules! isle_common_prelude_methods {
         #[inline]
         fn u8_and(&mut self, a: u8, b: u8) -> u8 {
             a & b
+        }
+
+        #[inline]
+        fn u8_shl(&mut self, a: u8, b: u8) -> u8 {
+            a << b
+        }
+
+        #[inline]
+        fn u8_shr(&mut self, a: u8, b: u8) -> u8 {
+            a >> b
         }
 
         #[inline]

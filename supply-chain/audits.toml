@@ -58,6 +58,19 @@ I am employed by a member of the Bytecode Alliance and plan to continue doing
 so and will actively maintain this crate over time.
 """
 
+[[wildcard-audits.wasm-metadata]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 1
+start = "2020-12-11"
+end = "2024-04-14"
+notes = """
+This is a Bytecode Alliance authored crate maintained in the `wasm-tools`
+repository of which I'm one of the primary maintainers and publishers for.
+I am employed by a member of the Bytecode Alliance and plan to continue doing
+so and will actively maintain this crate over time.
+"""
+
 [[wildcard-audits.wasm-mutate]]
 who = "Nick Fitzgerald <fitzgen@gmail.com>"
 criteria = "safe-to-deploy"
@@ -150,6 +163,91 @@ I am employed by a member of the Bytecode Alliance and plan to continue doing
 so and will actively maintain this crate over time.
 """
 
+[[wildcard-audits.wit-bindgen]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 1
+start = "2020-12-11"
+end = "2024-04-14"
+notes = """
+This is a Bytecode Alliance authored crate maintained in the `wit-bindgen`
+repository of which I'm one of the primary maintainers and publishers for.
+I am employed by a member of the Bytecode Alliance and plan to continue doing
+so and will actively maintain this crate over time.
+"""
+
+[[wildcard-audits.wit-bindgen-core]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 1
+start = "2020-12-11"
+end = "2024-04-14"
+notes = """
+This is a Bytecode Alliance authored crate maintained in the `wit-bindgen`
+repository of which I'm one of the primary maintainers and publishers for.
+I am employed by a member of the Bytecode Alliance and plan to continue doing
+so and will actively maintain this crate over time.
+"""
+
+[[wildcard-audits.wit-bindgen-rust]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 1
+start = "2020-12-11"
+end = "2024-04-14"
+notes = """
+This is a Bytecode Alliance authored crate maintained in the `wit-bindgen`
+repository of which I'm one of the primary maintainers and publishers for.
+I am employed by a member of the Bytecode Alliance and plan to continue doing
+so and will actively maintain this crate over time.
+"""
+
+[[wildcard-audits.wit-bindgen-rust-lib]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 1
+start = "2020-12-11"
+end = "2024-04-14"
+notes = """
+This is a Bytecode Alliance authored crate maintained in the `wit-bindgen`
+repository of which I'm one of the primary maintainers and publishers for.
+I am employed by a member of the Bytecode Alliance and plan to continue doing
+so and will actively maintain this crate over time.
+"""
+
+[[wildcard-audits.wit-bindgen-rust-macro]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 1
+start = "2020-12-11"
+end = "2024-04-14"
+notes = """
+This is a Bytecode Alliance authored crate maintained in the `wit-bindgen`
+repository of which I'm one of the primary maintainers and publishers for.
+I am employed by a member of the Bytecode Alliance and plan to continue doing
+so and will actively maintain this crate over time.
+"""
+
+[[wildcard-audits.wit-component]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+user-id = 1
+start = "2020-12-11"
+end = "2024-04-14"
+notes = """
+This is a Bytecode Alliance authored crate maintained in the `wasm-tools`
+repository of which I'm one of the primary maintainers and publishers for.
+I am employed by a member of the Bytecode Alliance and plan to continue doing
+so and will actively maintain this crate over time.
+"""
+
+[[wildcard-audits.wit-component]]
+who = "Nick Fitzgerald <fitzgen@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 696
+start = "2019-03-16"
+end = "2024-03-10"
+
 [[wildcard-audits.wit-parser]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
@@ -199,6 +297,11 @@ nightly feature in the standard library for backtrace integration. No undue
 `unsafe` is added and nothing unsurprising for the `anyhow` crate is happening
 here.
 """
+
+[[audits.anyhow]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.69 -> 1.0.71"
 
 [[audits.arbitrary]]
 who = "Nick Fitzgerald <fitzgen@gmail.com>"
@@ -494,6 +597,15 @@ criteria = "safe-to-deploy"
 version = "0.2.4"
 notes = "A few tiny blocks of `unsafe` but each of them is very obviously correct."
 
+[[audits.cpufeatures]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.2 -> 0.2.7"
+notes = """
+This is a minor update that looks to add some more detected CPU features and
+various other minor portability fixes such as MIRI support.
+"""
+
 [[audits.criterion]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-run"
@@ -527,6 +639,17 @@ criteria = "safe-to-deploy"
 delta = "0.4.5 -> 0.5.0"
 notes = "Just a version bump, only change to code is to remove an allow(deprecated)"
 
+[[audits.crossbeam-channel]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "0.5.4 -> 0.5.8"
+notes = """
+This diff does what it says on the tin for this version range, notably fixing a
+race condition, improving handling of durations, and additionally swapping out a
+spin lock with a lock from the standard library. Minor bits of `unsafe` code
+are modified but that's expected given the nature of this crate.
+"""
+
 [[audits.crypto-common]]
 who = "Benjamin Bouvier <public@benj.me>"
 criteria = "safe-to-deploy"
@@ -548,6 +671,15 @@ notes = "I am the author of this crate."
 who = "Benjamin Bouvier <public@benj.me>"
 criteria = "safe-to-deploy"
 delta = "0.9.0 -> 0.10.3"
+
+[[audits.ed25519]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "1.4.1 -> 1.5.3"
+notes = """
+This diff brings in a number of minor updates of which none are related to
+`unsafe` code or anything system-related like filesystems.
+"""
 
 [[audits.errno]]
 who = "Dan Gohman <dev@sunfishcode.online>"
@@ -588,6 +720,12 @@ Contains no unsafe code but does write log files to the filesystem. Log files
 are only created when requested by the application, however, and otherwise
 only does its stated purpose.
 """
+
+[[audits.file-per-thread-logger]]
+who = "Benjamin Bouvier <public@benj.me>"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = "Simple version bump."
 
 [[audits.file-per-thread-logger]]
 who = "Dan Gohman <dev@sunfishcode.online>"
@@ -875,6 +1013,15 @@ but also contains some other minor fixes as well. Everything looks A-OK and
 as expected.
 """
 
+[[audits.libm]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.4 -> 0.2.7"
+notes = """
+This is a minor update which has some testing affordances as well as some
+updated math algorithms.
+"""
+
 [[audits.linux-raw-sys]]
 who = "Dan Gohman <dev@sunfishcode.online>"
 criteria = "safe-to-deploy"
@@ -886,6 +1033,11 @@ who = "Dan Gohman <dev@sunfishcode.online>"
 criteria = "safe-to-deploy"
 version = "0.3.3"
 notes = "I am the author of this crate."
+
+[[audits.matchers]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0"
 
 [[audits.memfd]]
 who = "Alex Crichton <alex@alexcrichton.com>"
@@ -1039,6 +1191,11 @@ criteria = "safe-to-deploy"
 version = "0.3.25"
 notes = "This crate shells out to the pkg-config executable, but it appears to sanitize inputs reasonably."
 
+[[audits.proc-macro2]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.51 -> 1.0.57"
+
 [[audits.pulldown-cmark]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
@@ -1048,6 +1205,11 @@ This crate has `unsafe` blocks and they're all related to SIMD-acceleration and
 are otherwise not doing other `unsafe` operations. Additionally the crate does
 not do anything other than markdown rendering as is expected.
 """
+
+[[audits.quote]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.23 -> 1.0.27"
 
 [[audits.regalloc2]]
 who = "Jamey Sharp <jsharp@fastly.com>"
@@ -1190,6 +1352,21 @@ and does what it says on the tin, providing spin-based synchronization
 primitives.
 """
 
+[[audits.sptr]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+version = "0.3.2"
+notes = """
+This crate is 90% documentation and does contain a good deal of `unsafe` code,
+but it's all doing what it says on the tin: being a stable polyfill for strict
+provenance APIs in the standard library while they're on Nightly.
+"""
+
+[[audits.syn]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.92 -> 2.0.16"
+
 [[audits.system-interface]]
 who = "Dan Gohman <dev@sunfishcode.online>"
 criteria = "safe-to-deploy"
@@ -1219,6 +1396,16 @@ who = "Dan Gohman <dev@sunfishcode.online>"
 criteria = "safe-to-deploy"
 delta = "0.25.6 -> 0.25.7"
 notes = "This is a minor bug-fix update."
+
+[[audits.tempfile]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+delta = "3.3.0 -> 3.5.0"
+
+[[audits.test-log]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+version = "0.2.11"
 
 [[audits.tinyvec]]
 who = "Alex Crichton <alex@alexcrichton.com>"
@@ -1291,6 +1478,11 @@ notes = """
 This crate has no unsafe code and does not use `std::*`. Skimming the crate it
 does not attempt to out of the bounds of what it's already supposed to be doing.
 """
+
+[[audits.unicode-ident]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+version = "1.0.8"
 
 [[audits.unicode-normalization]]
 who = "Alex Crichton <alex@alexcrichton.com>"

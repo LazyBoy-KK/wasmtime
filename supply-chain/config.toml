@@ -320,7 +320,7 @@ version = "0.10.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.h2]]
-version = "0.3.16"
+version = "0.3.19"
 criteria = "safe-to-deploy"
 notes = "we are exempting tokio, hyper, and their tightly coupled dependencies by the same authors, expecting that the authors at aws will publish attestions we can import at some point soon"
 
@@ -497,10 +497,6 @@ criteria = "safe-to-deploy"
 version = "0.4.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.os_pipe]]
-version = "0.9.2"
-criteria = "safe-to-run"
-
 [[exemptions.os_str_bytes]]
 version = "6.0.0"
 criteria = "safe-to-deploy"
@@ -585,14 +581,6 @@ criteria = "safe-to-deploy"
 version = "1.0.4"
 criteria = "safe-to-deploy"
 
-[[exemptions.proc-macro-error-attr]]
-version = "1.0.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.proc-macro2]]
-version = "1.0.37"
-criteria = "safe-to-deploy"
-
 [[exemptions.proptest]]
 version = "1.0.0"
 criteria = "safe-to-deploy"
@@ -649,6 +637,10 @@ criteria = "safe-to-deploy"
 version = "0.2.13"
 criteria = "safe-to-deploy"
 
+[[exemptions.redox_syscall]]
+version = "0.3.5"
+criteria = "safe-to-deploy"
+
 [[exemptions.redox_users]]
 version = "0.4.3"
 criteria = "safe-to-deploy"
@@ -667,10 +659,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.region]]
 version = "2.2.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.remove_dir_all]]
-version = "0.5.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.ring]]
@@ -843,14 +831,6 @@ criteria = "safe-to-run"
 version = "1.15.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.unicode-width]]
-version = "0.1.9"
-criteria = "safe-to-deploy"
-
-[[exemptions.unicode-xid]]
-version = "0.2.3"
-criteria = "safe-to-deploy"
-
 [[exemptions.uuid]]
 version = "1.0.0"
 criteria = "safe-to-deploy"
@@ -873,10 +853,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.wasi]]
 version = "0.9.0+wasi-snapshot-preview1"
-criteria = "safe-to-deploy"
-
-[[exemptions.wasi]]
-version = "0.10.2+wasi-snapshot-preview1"
 criteria = "safe-to-deploy"
 
 [[exemptions.wasi]]

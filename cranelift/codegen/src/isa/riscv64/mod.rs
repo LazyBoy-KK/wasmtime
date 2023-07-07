@@ -2,8 +2,7 @@
 
 use crate::dominator_tree::DominatorTree;
 use crate::ir;
-use crate::ir::Function;
-
+use crate::ir::{Function, Type};
 use crate::isa::riscv64::settings as riscv_settings;
 use crate::isa::{Builder as IsaBuilder, FunctionAlignment, TargetIsa};
 use crate::machinst::{
@@ -78,15 +77,10 @@ impl TargetIsa for Riscv64Backend {
         let (vcode, regalloc_result) = self.compile_vcode(func, domtree, ctrl_plane)?;
 
         let want_disasm = want_disasm || log::log_enabled!(log::Level::Debug);
-        let emit_result = vcode.emit(
-            &regalloc_result,
-            want_disasm,
-            self.flags.machine_code_cfg_info(),
-            ctrl_plane,
-        );
+        let emit_result = vcode.emit(&regalloc_result, want_disasm, &self.flags, ctrl_plane);
         let frame_size = emit_result.frame_size;
         let value_labels_ranges = emit_result.value_labels_ranges;
-        let buffer = emit_result.buffer.finish(ctrl_plane);
+        let buffer = emit_result.buffer;
         let sized_stackslot_offsets = emit_result.sized_stackslot_offsets;
         let dynamic_stackslot_offsets = emit_result.dynamic_stackslot_offsets;
 
@@ -103,7 +97,6 @@ impl TargetIsa for Riscv64Backend {
             dynamic_stackslot_offsets,
             bb_starts: emit_result.bb_offsets,
             bb_edges: emit_result.bb_edges,
-            alignment: emit_result.alignment,
         })
     }
 
@@ -188,6 +181,10 @@ impl TargetIsa for Riscv64Backend {
 
     fn has_native_fma(&self) -> bool {
         true
+    }
+
+    fn has_x86_blendv_lowering(&self, _: Type) -> bool {
+        false
     }
 }
 

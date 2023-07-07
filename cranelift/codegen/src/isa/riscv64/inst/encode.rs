@@ -6,10 +6,11 @@
 //! Some instructions especially in extensions have slight variations from
 //! the base RISC-V specification.
 
-use super::{Imm5, UImm5, VType};
+use super::{Imm12, Imm5, UImm5, VType};
 use crate::isa::riscv64::inst::reg_to_gpr_num;
 use crate::isa::riscv64::lower::isle::generated_code::{
-    VecAluOpRRImm5, VecAluOpRRR, VecElementWidth, VecOpCategory, VecOpMasking,
+    VecAluOpRImm5, VecAluOpRR, VecAluOpRRImm5, VecAluOpRRR, VecElementWidth, VecOpCategory,
+    VecOpMasking,
 };
 use crate::machinst::isle::WritableReg;
 use crate::Reg;
@@ -50,6 +51,37 @@ pub fn encode_r_type(
         reg_to_gpr_num(rs2),
         funct7,
     )
+}
+
+/// Encode an I-type instruction.
+///
+/// Layout:
+/// 0-------6-7-------11-12------14-15------19-20------------------31
+/// | Opcode |   rd     |  width   |   rs1    |     Offset[11:0]    |
+pub fn encode_i_type(opcode: u32, rd: WritableReg, width: u32, rs1: Reg, offset: Imm12) -> u32 {
+    let mut bits = 0;
+    bits |= unsigned_field_width(opcode, 7);
+    bits |= reg_to_gpr_num(rd.to_reg()) << 7;
+    bits |= unsigned_field_width(width, 3) << 12;
+    bits |= reg_to_gpr_num(rs1) << 15;
+    bits |= unsigned_field_width(offset.as_u32(), 12) << 20;
+    bits
+}
+
+/// Encode an S-type instruction.
+///
+/// Layout:
+/// 0-------6-7-------11-12------14-15------19-20---24-25-------------31
+/// | Opcode | imm[4:0] |  width   |   base   |  src  |    imm[11:5]   |
+pub fn encode_s_type(opcode: u32, width: u32, base: Reg, src: Reg, offset: Imm12) -> u32 {
+    let mut bits = 0;
+    bits |= unsigned_field_width(opcode, 7);
+    bits |= (offset.as_u32() & 0b11111) << 7;
+    bits |= unsigned_field_width(width, 3) << 12;
+    bits |= reg_to_gpr_num(base) << 15;
+    bits |= reg_to_gpr_num(src) << 20;
+    bits |= unsigned_field_width(offset.as_u32() >> 5, 7) << 25;
+    bits
 }
 
 /// Encodes a Vector ALU instruction.
@@ -110,6 +142,48 @@ pub fn encode_valu_imm(
         op.funct3(),
         imm,
         reg_to_gpr_num(vs2),
+        funct7,
+    )
+}
+
+pub fn encode_valu_rr(op: VecAluOpRR, vd: WritableReg, vs: Reg, masking: VecOpMasking) -> u32 {
+    let funct7 = (op.funct6() << 1) | masking.encode();
+
+    let (vs1, vs2) = if op.vs_is_vs2_encoded() {
+        (op.aux_encoding(), reg_to_gpr_num(vs))
+    } else {
+        (reg_to_gpr_num(vs), op.aux_encoding())
+    };
+
+    encode_r_type_bits(
+        op.opcode(),
+        reg_to_gpr_num(vd.to_reg()),
+        op.funct3(),
+        vs1,
+        vs2,
+        funct7,
+    )
+}
+
+pub fn encode_valu_r_imm(
+    op: VecAluOpRImm5,
+    vd: WritableReg,
+    imm: Imm5,
+    masking: VecOpMasking,
+) -> u32 {
+    let funct7 = (op.funct6() << 1) | masking.encode();
+
+    // This is true for this opcode, not sure if there are any other ones.
+    debug_assert_eq!(op, VecAluOpRImm5::VmvVI);
+    let vs1 = imm.bits() as u32;
+    let vs2 = op.aux_encoding();
+
+    encode_r_type_bits(
+        op.opcode(),
+        reg_to_gpr_num(vd.to_reg()),
+        op.funct3(),
+        vs1,
+        vs2,
         funct7,
     )
 }

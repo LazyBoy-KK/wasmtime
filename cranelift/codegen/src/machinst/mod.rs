@@ -49,6 +49,7 @@ use crate::ir::function::FunctionParameters;
 use crate::ir::{DynamicStackSlot, RelSourceLoc, StackSlot, Type};
 use crate::isa::FunctionAlignment;
 use crate::result::CodegenResult;
+use crate::settings;
 use crate::settings::Flags;
 use crate::value_label::ValueLabelsRanges;
 use alloc::vec::Vec;
@@ -142,6 +143,20 @@ pub trait MachInst: Clone + Debug {
     /// Generate a jump to another target. Used during lowering of
     /// control flow.
     fn gen_jump(target: MachLabel) -> Self;
+
+    /// Generate a store of an immediate 64-bit integer to a register. Used by
+    /// the control plane to generate random instructions.
+    fn gen_imm_u64(_value: u64, _dst: Writable<Reg>) -> Option<Self> {
+        None
+    }
+
+    /// Generate a store of an immediate 64-bit integer to a register. Used by
+    /// the control plane to generate random instructions. The tmp register may
+    /// be used by architectures which don't support writing immediate values to
+    /// floating point registers directly.
+    fn gen_imm_f64(_value: f64, _tmp: Writable<Reg>, _dst: Writable<Reg>) -> SmallVec<[Self; 2]> {
+        SmallVec::new()
+    }
 
     /// Generate a NOP. The `preferred_size` parameter allows the caller to
     /// request a NOP of that size, or as close to it as possible. The machine
@@ -327,9 +342,6 @@ pub struct CompiledCodeBase<T: CompilePhase> {
     /// This info is generated only if the `machine_code_cfg_info`
     /// flag is set.
     pub bb_edges: Vec<(CodeOffset, CodeOffset)>,
-    /// Minimum alignment for the function, derived from the use of any
-    /// pc-relative loads.
-    pub alignment: u32,
 }
 
 impl CompiledCodeStencil {
@@ -344,7 +356,6 @@ impl CompiledCodeStencil {
             dynamic_stackslot_offsets: self.dynamic_stackslot_offsets,
             bb_starts: self.bb_starts,
             bb_edges: self.bb_edges,
-            alignment: self.alignment,
         }
     }
 }

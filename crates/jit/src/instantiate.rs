@@ -568,19 +568,6 @@ impl CompiledModule {
         Some(&self.text()[loc.start as usize..][..loc.length as usize])
     }
 
-<<<<<<< HEAD
-    /// Returns an iterator over all array-to-Wasm trampolines defined within
-    /// this module, providing both their index and their in-memory body.
-    pub fn array_to_wasm_trampolines(
-        &self,
-    ) -> impl Iterator<Item = (DefinedFuncIndex, &[u8])> + '_ {
-        self.funcs
-            .keys()
-            .filter_map(move |i| Some((i, self.array_to_wasm_trampoline(i)?)))
-    }
-
-=======
->>>>>>> v10.0.1
     /// Get the native-to-Wasm trampoline for the function `index` points to.
     ///
     /// If the function `index` points to does not escape, then `None` is
@@ -593,19 +580,6 @@ impl CompiledModule {
         Some(&self.text()[loc.start as usize..][..loc.length as usize])
     }
 
-<<<<<<< HEAD
-    /// Returns an iterator over all native-to-Wasm trampolines defined within
-    /// this module, providing both their index and their in-memory body.
-    pub fn native_to_wasm_trampolines(
-        &self,
-    ) -> impl Iterator<Item = (DefinedFuncIndex, &[u8])> + '_ {
-        self.funcs
-            .keys()
-            .filter_map(move |i| Some((i, self.native_to_wasm_trampoline(i)?)))
-    }
-
-=======
->>>>>>> v10.0.1
     /// Get the Wasm-to-native trampoline for the given signature.
     ///
     /// These trampolines are used for filling in

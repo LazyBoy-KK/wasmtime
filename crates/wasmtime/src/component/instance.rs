@@ -654,27 +654,14 @@ impl<'a, 'store> ExportInstance<'a, 'store> {
     }
 
     #[cfg(feature = "quickjs-libc")]
-    /// return funcs
-    pub fn funcs(&'a mut self) -> impl Iterator<Item = (String, Func)> + 'a {
+    /// return exports names of the instance
+    pub fn names(&mut self) -> impl Iterator<Item = &String> {
         self.exports.iter().filter_map(|(name, export)| {
-            if let Export::LiftedFunction { 
-                ty, 
-                func, 
-                options 
-            } = export {
-                Some((
-                    name.clone(),
-                    Func::from_lifted_func(
-                        self.store,
-                        self.instance,
-                        self.data,
-                        *ty,
-                        func,
-                        options,
-                    )
-                ))
-            } else {
-                None
+            match export {
+                Export::Type(_) => None,
+                Export::Module(_) | Export::Instance(_) | Export::LiftedFunction { .. } => {
+                    Some(name)
+                }
             }
         })
     }

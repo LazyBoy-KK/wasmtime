@@ -653,19 +653,6 @@ impl<'a, 'store> ExportInstance<'a, 'store> {
         }
     }
 
-    #[cfg(feature = "quickjs-libc")]
-    /// return exports names of the instance
-    pub fn names(&mut self) -> impl Iterator<Item = &String> {
-        self.exports.iter().filter_map(|(name, export)| {
-            match export {
-                Export::Type(_) => None,
-                Export::Module(_) | Export::Instance(_) | Export::LiftedFunction { .. } => {
-                    Some(name)
-                }
-            }
-        })
-    }
-
     /// Same as [`Instance::get_typed_func`]
     pub fn typed_func<Params, Results>(&mut self, name: &str) -> Result<TypedFunc<Params, Results>>
     where

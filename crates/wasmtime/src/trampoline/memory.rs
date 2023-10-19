@@ -16,6 +16,9 @@ use wasmtime_runtime::{
     RuntimeMemoryCreator, SharedMemory, StorePtr, Table, TableAllocationIndex, VMMemoryDefinition,
 };
 
+#[cfg(feature = "quickjs-libc")]
+use wasmtime_runtime::TempMemory;
+
 #[cfg(feature = "component-model")]
 use wasmtime_environ::{
     component::{Component, VMComponentOffsets},
@@ -73,6 +76,159 @@ pub fn create_memory(
         .allocate_module(request)?;
         let instance_id = store.add_instance(handle.clone(), true);
         Ok(instance_id)
+    }
+}
+
+#[cfg(feature = "quickjs-libc")]
+pub fn create_memory_from_temp(
+    store: &mut StoreOpaque,
+    memory_ty: &MemoryType,
+    preallocation: Option<TempMemory>,
+) -> Result<InstanceId> {
+    let mut module = Module::new();
+
+    // Create a memory plan for the memory, though it will never be used for
+    // constructing a memory with an allocator: instead the memories are either
+    // preallocated (i.e., shared memory) or allocated manually below.
+    let plan = wasmtime_environ::MemoryPlan::for_memory(
+        memory_ty.wasmtime_memory().clone(),
+        &store.engine().config().tunables,
+    );
+    let memory_id = module.memory_plans.push(plan.clone());
+
+    // Since we have only associated a single memory with the "frankenstein"
+    // instance, it will be exported at index 0.
+    debug_assert_eq!(memory_id.as_u32(), 0);
+    module
+        .exports
+        .insert(String::new(), EntityIndex::Memory(memory_id));
+
+    // We create an instance in the on-demand allocator when creating handles
+    // associated with external objects. The configured instance allocator
+    // should only be used when creating module instances as we don't want host
+    // objects to count towards instance limits.
+    let runtime_info = &BareModuleInfo::maybe_imported_func(Arc::new(module), None).into_traitobj();
+    let host_state = Box::new(());
+    let imports = Imports::default();
+    let request = InstanceAllocationRequest {
+        imports,
+        host_state,
+        store: StorePtr::new(store.traitobj()),
+        runtime_info,
+        wmemcheck: false,
+    };
+
+    unsafe {
+        let handle = SingleTempMemoryInstance {
+            preallocation,
+            ondemand: OnDemandInstanceAllocator::default(),
+        }
+        .allocate_module(request)?;
+        let instance_id = store.add_instance(handle.clone(), true);
+        Ok(instance_id)
+    }
+}
+
+#[cfg(feature = "quickjs-libc")]
+struct SingleTempMemoryInstance {
+    preallocation: Option<TempMemory>,
+    ondemand: OnDemandInstanceAllocator,
+}
+
+#[cfg(feature = "quickjs-libc")]
+unsafe impl InstanceAllocatorImpl for SingleTempMemoryInstance {
+    #[cfg(feature = "component-model")]
+    fn validate_component_impl<'a>(
+        &self,
+        _component: &Component,
+        _offsets: &VMComponentOffsets<HostPtr>,
+        _get_module: &'a dyn Fn(StaticModuleIndex) -> &'a Module,
+    ) -> Result<()> {
+        unreachable!("`SingleMemoryInstance` allocator never used with components")
+    }
+
+    fn validate_module_impl(&self, module: &Module, offsets: &VMOffsets<HostPtr>) -> Result<()> {
+        anyhow::ensure!(
+            module.memory_plans.len() == 1,
+            "`SingleMemoryInstance` allocator can only be used for modules with a single memory"
+        );
+        self.ondemand.validate_module_impl(module, offsets)?;
+        Ok(())
+    }
+
+    fn increment_component_instance_count(&self) -> Result<()> {
+        self.ondemand.increment_component_instance_count()
+    }
+
+    fn decrement_component_instance_count(&self) {
+        self.ondemand.decrement_component_instance_count();
+    }
+
+    fn increment_core_instance_count(&self) -> Result<()> {
+        self.ondemand.increment_core_instance_count()
+    }
+
+    fn decrement_core_instance_count(&self) {
+        self.ondemand.decrement_core_instance_count();
+    }
+
+    unsafe fn allocate_memory(
+        &self,
+        request: &mut InstanceAllocationRequest,
+        memory_plan: &MemoryPlan,
+        memory_index: DefinedMemoryIndex,
+    ) -> Result<(MemoryAllocationIndex, Memory)> {
+        match &self.preallocation {
+            Some(temp_memory) => Ok((
+                MemoryAllocationIndex::default(),
+                temp_memory.clone().as_memory(),
+            )),
+            None => {
+                self.ondemand.allocate_memory(request, memory_plan, memory_index)
+            }
+        }
+    }
+
+    unsafe fn deallocate_memory(
+        &self,
+        memory_index: DefinedMemoryIndex,
+        allocation_index: MemoryAllocationIndex,
+        memory: Memory,
+    ) {
+        self.ondemand.deallocate_memory(memory_index, allocation_index, memory)
+    }
+
+    unsafe fn allocate_table(
+        &self,
+        req: &mut InstanceAllocationRequest,
+        table_plan: &wasmtime_environ::TablePlan,
+        table_index: DefinedTableIndex,
+    ) -> Result<(TableAllocationIndex, Table)> {
+        self.ondemand.allocate_table(req, table_plan, table_index)
+    }
+
+    unsafe fn deallocate_table(
+        &self,
+        table_index: DefinedTableIndex,
+        allocation_index: TableAllocationIndex,
+        table: Table,
+    ) {
+        self.ondemand
+            .deallocate_table(table_index, allocation_index, table)
+    }
+
+    #[cfg(feature = "async")]
+    fn allocate_fiber_stack(&self) -> Result<wasmtime_fiber::FiberStack> {
+        unreachable!()
+    }
+
+    #[cfg(feature = "async")]
+    unsafe fn deallocate_fiber_stack(&self, stack: &wasmtime_fiber::FiberStack) {
+        unreachable!()
+    }
+
+    fn purge_module(&self, _: CompiledModuleId) {
+        unreachable!()
     }
 }
 

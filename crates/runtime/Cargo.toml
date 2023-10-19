@@ -67,3 +67,6 @@ component-model = [
 ]
 
 wmemcheck = []
+
+# Enable quickjs-libc compatable code path
+quickjs-libc = []

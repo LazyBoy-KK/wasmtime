@@ -133,3 +133,6 @@ component-model = [
 ]
 
 wmemcheck = ["wasmtime-runtime/wmemcheck", "wasmtime-cranelift?/wmemcheck"]
+
+# Enable quickjs-libc compatable code path
+quickjs-libc = ["wasmtime-runtime/quickjs-libc"]

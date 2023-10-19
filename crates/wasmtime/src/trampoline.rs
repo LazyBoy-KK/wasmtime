@@ -9,6 +9,9 @@ pub use self::func::*;
 pub use self::global::*;
 pub(crate) use memory::MemoryCreatorProxy;
 
+#[cfg(feature = "quickjs-libc")]
+use self::memory::create_memory_from_temp;
+
 use self::memory::create_memory;
 use self::table::create_table;
 use crate::module::BareModuleInfo;
@@ -22,6 +25,9 @@ use wasmtime_runtime::{
     Imports, InstanceAllocationRequest, InstanceAllocator, OnDemandInstanceAllocator, SharedMemory,
     StorePtr, VMFunctionImport, VMSharedSignatureIndex,
 };
+
+#[cfg(feature = "quickjs-libc")]
+use wasmtime_runtime::TempMemory;
 
 fn create_handle(
     module: Module,
@@ -73,4 +79,16 @@ pub fn generate_table_export(
     Ok(store
         .instance_mut(instance)
         .get_exported_table(TableIndex::from_u32(0)))
+}
+
+#[cfg(feature = "quickjs-libc")]
+pub fn generate_memory_export_for_temp(
+    store: &mut StoreOpaque,
+    m: &MemoryType,
+    preallocation: Option<TempMemory>,
+) -> Result<wasmtime_runtime::ExportMemory> {
+    let instance = create_memory_from_temp(store, m, preallocation)?;
+    Ok(store
+        .instance_mut(instance)
+        .get_exported_memory(MemoryIndex::from_u32(0)))
 }

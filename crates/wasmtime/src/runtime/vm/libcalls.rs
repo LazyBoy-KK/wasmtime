@@ -182,6 +182,22 @@ pub mod raw {
     }
 }
 
+#[cfg(feature = "wa2x-test")]
+fn record_memory(instance: &Instance, index: MemoryIndex){
+	use std::io::Write;
+
+	let mem = instance.get_memory(index);
+	let addr = mem.base as usize;
+	let size = mem.current_length();
+	let file_path = std::env::var("LINEAR_MEMORY_PATH").unwrap_or("/tmp/linear_mem.txt".to_string());
+	let mut file = std::fs::OpenOptions::new()
+		.write(true)
+		.truncate(true)
+		.create(true)
+		.open(file_path).unwrap();
+	file.write(format!("{addr} {size}").as_bytes()).unwrap();
+}
+
 fn memory32_grow(
     instance: &mut Instance,
     delta: u64,
@@ -198,6 +214,8 @@ fn memory32_grow(
             Some(size_in_bytes) => size_in_bytes / instance.memory_page_size(memory_index),
             None => usize::max_value(),
         };
+	#[cfg(feature = "wa2x-test")]
+	record_memory(instance, memory_index);
     Ok(result as *mut _)
 }
 

@@ -1104,6 +1104,7 @@ impl<T> Linker<T> {
     /// # Ok(())
     /// # }
     /// ```
+	#[cfg(not(feature = "wa2x-test"))]
     pub fn instantiate(
         &self,
         mut store: impl AsContextMut<Data = T>,
@@ -1111,6 +1112,31 @@ impl<T> Linker<T> {
     ) -> Result<Instance> {
         self._instantiate_pre(module, Some(store.as_context_mut().0))?
             .instantiate(store)
+    }
+
+	#[cfg(feature = "wa2x-test")]
+	/// ...
+	pub fn instantiate(
+        &self,
+        mut store: impl AsContextMut<Data = T>,
+        module: &Module,
+    ) -> Result<Instance> {
+		use std::io::Write;
+		let module_info = super::vm::ModuleRuntimeInfo::Module(module.clone());
+        let instance = self._instantiate_pre(module, Some(&store.as_context_mut().0))?
+            .instantiate(&mut store)?;
+		let id = instance.id(&store.as_context().0);
+		let instance_handle = store.as_context().0.instance(id);
+		let vmctx = instance_handle.vmctx() as usize;
+		let size = module_info.offsets().size_of_vmctx();
+		let file_path = std::env::var("VMCTX_PATH").unwrap_or("/tmp/vmctx.txt".to_string());
+		let mut file = std::fs::OpenOptions::new()
+			.write(true)
+			.truncate(true)
+			.create(true)
+			.open(file_path).unwrap();
+		file.write(format!("{vmctx} {size}").as_bytes()).unwrap();
+		Ok(instance)
     }
 
     /// Attempts to instantiate the `module` provided. This is the same as

@@ -76,6 +76,21 @@ pub struct RunCommand {
     pub module_and_args: Vec<OsString>,
 }
 
+#[cfg(feature = "wa2x-test")]
+fn get_execode_addr(module: &Module) -> Result<()> {
+    use std::io::Write;
+
+	let code_slice = module.text();
+	let addr_path = std::env::var("CODE_ADDR_PATH").unwrap_or("/tmp/code_addr.txt".into());
+	let mut file = std::fs::OpenOptions::new()
+		.create(true)
+		.write(true)
+		.open(addr_path)?;
+	let code_addr = code_slice.as_ptr() as usize;
+	file.write(format!("{code_addr} {}", code_slice.len()).as_bytes())?;
+	Ok(())
+}
+
 enum CliLinker {
     Core(wasmtime::Linker<Host>),
     #[cfg(feature = "component-model")]
@@ -109,6 +124,11 @@ impl RunCommand {
         let main = self
             .run
             .load_module(&engine, self.module_and_args[0].as_ref())?;
+
+		#[cfg(feature = "wa2x-test")]
+		if let RunTarget::Core(module) = &main {
+			get_execode_addr(module)?;
+		}
 
         // Validate coredump-on-trap argument
         if let Some(path) = &self.run.common.debug.coredump {
@@ -407,6 +427,20 @@ impl RunCommand {
                     "failed to instantiate {:?}",
                     self.module_and_args[0]
                 ))?;
+
+				#[cfg(feature = "wa2x-test")]
+				{
+					use std::io::Write;
+					let mem = instance.get_memory(&mut *store, "memory").unwrap();
+					let addr = mem.data_ptr(&store) as usize;
+					let size = mem.size(&store) * mem.page_size(&store);
+					let file_path = std::env::var("LINEAR_MEMORY_PATH").unwrap_or("/tmp/linear_mem.txt".to_string());
+					let mut file = std::fs::OpenOptions::new()
+						.write(true)
+						.create(true)
+						.open(file_path).unwrap();
+					file.write(format!("{addr} {size}").as_bytes()).unwrap();
+				}
 
                 // If `_initialize` is present, meaning a reactor, then invoke
                 // the function.

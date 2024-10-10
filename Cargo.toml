@@ -366,7 +366,7 @@ default = [
 
   # Most features of Wasmtime are enabled by default.
   "wat",
-  "parallel-compilation",
+#   "parallel-compilation",
   "pooling-allocator",
   "cache",
   "logging",
@@ -389,7 +389,7 @@ default = [
   "wa2x-test",
 ]
 
-wa2x-test = ["wasmtime/wa2x-test"]
+wa2x-test = ["wasmtime/wa2x-test", "wasmtime-cli-flags/wa2x-test", "cranelift-filetests/wa2x-test"]
 
 # ========================================
 # Off-by-default features

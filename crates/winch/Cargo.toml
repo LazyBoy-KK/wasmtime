@@ -27,3 +27,4 @@ component-model = [
     "wasmtime-cranelift/component-model",
 ]
 all-arch = ["winch-codegen/all-arch"]
+wa2x-test = ["wasmtime-environ/wa2x-test", "wasmtime-cranelift/wa2x-test"]

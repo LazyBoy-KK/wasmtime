@@ -123,6 +123,8 @@ isle-in-source-tree = []
 # Enabled by default.
 timing = []
 
+wa2x-test = []
+
 [[bench]]
 name = "x64-evex-encoding"
 harness = false

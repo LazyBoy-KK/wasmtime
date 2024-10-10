@@ -80,6 +80,9 @@ enum Subcommand {
     /// Runs a WebAssembly test script file
     #[cfg(feature = "wast")]
     Wast(wasmtime_cli::commands::WastCommand),
+
+	#[cfg(feature = "wa2x-test")]
+	Addrmap(wasmtime_cli::commands::AddrmapCommand),
 }
 
 impl Wasmtime {
@@ -111,6 +114,9 @@ impl Wasmtime {
 
             #[cfg(feature = "wast")]
             Subcommand::Wast(c) => c.execute(),
+
+			#[cfg(feature = "wa2x-test")]
+			Subcommand::Addrmap(c) => c.execute(),
         }
     }
 }

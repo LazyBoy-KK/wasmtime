@@ -62,6 +62,10 @@ pub struct Tunables {
 
     /// Whether or not Wasm functions target the winch abi.
     pub winch_callable: bool,
+
+	#[cfg(feature = "wa2x-test")]
+	/// Whether or not enable wa2x debug info
+	pub wa2x_debug_info: bool,
 }
 
 impl Tunables {
@@ -109,10 +113,16 @@ impl Tunables {
             static_memory_bound_is_maximum: false,
             guard_before_linear_memory: true,
             table_lazy_init: true,
-            generate_address_map: true,
+			#[cfg(feature = "wa2x-test")]
+            generate_address_map: false,
+			#[cfg(not(feature = "wa2x-test"))]
+			generate_address_map: true,
             debug_adapter_modules: false,
             relaxed_simd_deterministic: false,
             winch_callable: false,
+
+			#[cfg(feature = "wa2x-test")]
+			wa2x_debug_info: false,
         }
     }
 

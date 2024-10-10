@@ -49,6 +49,10 @@ pub use crate::translation_utils::*;
 pub use cranelift_frontend::FunctionBuilder;
 pub use wasmtime_types::*;
 
+#[cfg(feature = "wa2x-test")]
+/// wa2x debug text
+pub use cranelift_codegen::debug_ctx;
+
 // Convenience reexport of the wasmparser crate that we're linking against,
 // since a number of types in `wasmparser` show up in the public API of
 // `cranelift-wasm`.

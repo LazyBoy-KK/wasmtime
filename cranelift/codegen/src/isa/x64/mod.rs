@@ -20,6 +20,8 @@ use alloc::{boxed::Box, vec::Vec};
 use core::fmt;
 use cranelift_control::ControlPlane;
 use target_lexicon::Triple;
+#[cfg(feature = "wa2x-test")]
+use crate::debug_ctx::DebugCtx;
 
 mod abi;
 pub mod encoding;
@@ -58,7 +60,15 @@ impl X64Backend {
         let emit_info = EmitInfo::new(self.flags.clone(), self.x64_flags.clone());
         let sigs = SigSet::new::<abi::X64ABIMachineSpec>(func, &self.flags)?;
         let abi = abi::X64Callee::new(func, self, &self.x64_flags, &sigs)?;
-        compile::compile::<Self>(func, domtree, self, abi, emit_info, sigs, ctrl_plane)
+        compile::compile::<Self>(
+			func, 
+			domtree, 
+			self, 
+			abi, 
+			emit_info, 
+			sigs, 
+			ctrl_plane,
+		)
     }
 }
 
@@ -69,10 +79,19 @@ impl TargetIsa for X64Backend {
         domtree: &DominatorTree,
         want_disasm: bool,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> CodegenResult<CompiledCodeStencil> {
         let (vcode, regalloc_result) = self.compile_vcode(func, domtree, ctrl_plane)?;
 
-        let emit_result = vcode.emit(&regalloc_result, want_disasm, &self.flags, ctrl_plane);
+        let emit_result = vcode.emit(
+			&regalloc_result, 
+			want_disasm, 
+			&self.flags, 
+			ctrl_plane,
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx,
+		);
         let frame_size = emit_result.frame_size;
         let value_labels_ranges = emit_result.value_labels_ranges;
         let buffer = emit_result.buffer;

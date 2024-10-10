@@ -64,6 +64,10 @@ use std::string::String;
 #[cfg(feature = "enable-serde")]
 use serde_derive::{Deserialize, Serialize};
 
+#[cfg(feature = "wa2x-test")]
+/// wa2x debug context
+pub mod debug_ctx;
+
 #[macro_use]
 pub mod isle;
 
@@ -101,6 +105,18 @@ pub trait MachInst: Clone + Debug {
 
     /// If this is a simple move, return the (source, destination) tuple of registers.
     fn is_move(&self) -> Option<(Writable<Reg>, Reg)>;
+
+	/// If this is a load
+	#[cfg(feature = "wa2x-test")]
+	fn is_load(&self) -> bool;
+
+	#[cfg(feature = "wa2x-test")]
+	/// If this is a store
+	fn is_store(&self) -> bool;
+
+	#[cfg(feature = "wa2x-test")]
+	/// If this is a trapif
+	fn is_trapif(&self) -> bool;
 
     /// Is this a terminator (branch or ret)? If so, return its type
     /// (ret/uncond/cond) and target if applicable.

@@ -628,10 +628,13 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
                 self.emit(insn);
             }
 
+			#[cfg(feature = "wa2x-test")]
+			self.finish_ir_inst(RelSourceLoc::new(0));
             // The `args` instruction below must come first. Finish
             // the current "IR inst" (with a default source location,
             // as for other special instructions inserted during
             // lowering) and continue the scan backward.
+			#[cfg(not(feature = "wa2x-test"))]
             self.finish_ir_inst(Default::default());
 
             if let Some(insn) = self.vcode.vcode.abi.take_args() {
@@ -1112,6 +1115,9 @@ impl<'func, I: VCodeInst> Lower<'func, I> {
             if bindex.index() == 0 {
                 // Set up the function with arg vreg inits.
                 self.gen_arg_setup();
+				#[cfg(feature = "wa2x-test")]
+				self.finish_ir_inst(RelSourceLoc::new(0));
+				#[cfg(not(feature = "wa2x-test"))]
                 self.finish_ir_inst(Default::default());
             }
 

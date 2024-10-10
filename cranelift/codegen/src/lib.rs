@@ -22,6 +22,9 @@ use hashbrown::{hash_map, HashMap};
 #[cfg(feature = "std")]
 use std::collections::{hash_map, HashMap};
 
+#[cfg(feature = "wa2x-test")]
+pub use crate::machinst::debug_ctx;
+
 pub use crate::context::Context;
 pub use crate::value_label::{LabelValueLoc, ValueLabelsRanges, ValueLocRange};
 pub use crate::verifier::verify_function;

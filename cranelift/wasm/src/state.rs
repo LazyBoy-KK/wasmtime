@@ -3,6 +3,13 @@
 //! The `FuncTranslationState` struct defined in this module is used to keep track of the WebAssembly
 //! value and control stacks during the translation of a single function.
 
+#[cfg(feature = "wa2x-test")]
+use cranelift_codegen::debug_ctx::DebugCtx;
+#[cfg(feature = "wa2x-test")]
+use core::panic::Location;
+#[cfg(feature = "wa2x-test")]
+use cranelift_frontend::FunctionBuilder;
+
 use crate::environ::{FuncEnvironment, GlobalVariable};
 use crate::{FuncIndex, GlobalIndex, Heap, MemoryIndex, TypeIndex, WasmResult};
 use crate::{HashMap, Occupied, Vacant};
@@ -238,6 +245,10 @@ pub struct FuncTranslationState {
     // `FuncEnvironment::make_direct_func()`.
     // Stores both the function reference and the number of WebAssembly arguments
     functions: HashMap<FuncIndex, (ir::FuncRef, usize)>,
+
+	#[cfg(feature = "wa2x-test")]
+	/// wa2x debug text
+	pub debug_ctx: Option<DebugCtx>
 }
 
 // Public methods that are exposed to non-`cranelift_wasm` API consumers.
@@ -260,6 +271,8 @@ impl FuncTranslationState {
             memory_to_heap: HashMap::new(),
             signatures: HashMap::new(),
             functions: HashMap::new(),
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx: None
         }
     }
 
@@ -288,6 +301,49 @@ impl FuncTranslationState {
                 .count(),
         );
     }
+
+	#[cfg(feature = "wa2x-test")]
+	/// add wa2x debug info for func
+	pub fn add_func_debug_info(&mut self, builder: &mut FunctionBuilder, func_name: &str) {
+		if let Some(ctx) = self.debug_ctx.as_mut() {
+			let mut text = std::string::String::new();
+			text.push_str("Function: ");
+			text.push_str(func_name);
+			text.push_str("\n");
+			ctx.add_func_debug_info(text);
+			builder.set_srcloc(ctx.line());
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	/// add wa2x debug info for inst
+	pub fn add_debug_info(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location) {
+		if let Some(ctx) = self.debug_ctx.as_mut() {
+			ctx.add_debug_info(format!("\tCraneliftIRInfo {output} {source_location}\n"));
+			builder.set_srcloc(ctx.line());
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	/// add wa2x debug info for inst
+	pub fn add_debug_info_cursor(
+		&mut self, 
+		pos: &mut cranelift_codegen::cursor::FuncCursor, 
+		output: &str,
+		source_location: &Location
+	) {
+		use cranelift_codegen::cursor::Cursor;
+		if let Some(ctx) = self.debug_ctx.as_mut() {
+			ctx.add_debug_info(format!("\tCraneliftIRInfo {output} {source_location}\n"));
+			pos.set_srcloc(ctx.line());
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	/// get reference of debug ctx
+	pub fn debug_ctx(&mut self) -> Option<&mut DebugCtx> {
+		self.debug_ctx.as_mut()
+	}
 
     /// Push a value.
     pub(crate) fn push1(&mut self, val: Value) {

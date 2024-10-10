@@ -34,3 +34,8 @@ pub use self::compile::*;
 mod settings;
 #[cfg(feature = "cranelift")]
 pub use self::settings::*;
+
+#[cfg(feature = "wa2x-test")]
+mod addrmap;
+#[cfg(feature = "wa2x-test")]
+pub use self::addrmap::*;

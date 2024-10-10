@@ -596,6 +596,17 @@ impl<'f> FuncCursor<'f> {
     pub fn ins(&mut self) -> ir::InsertBuilder<'_, &mut FuncCursor<'f>> {
         ir::InsertBuilder::new(self)
     }
+
+	#[cfg(feature = "wa2x-test")]
+	/// Return true if global value data is load
+	pub fn is_load_global_value(&self, gv: ir::GlobalValue) -> bool {
+		let data = &self.func.global_values[gv];
+		if let ir::GlobalValueData::Load { .. } = data {
+			true
+		} else {
+			false
+		}
+	}
 }
 
 impl<'f> Cursor for FuncCursor<'f> {

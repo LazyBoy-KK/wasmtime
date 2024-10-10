@@ -13,13 +13,22 @@ pub fn gc_compiler(_func_env: &FuncEnvironment<'_>) -> Box<dyn GcCompiler> {
 }
 
 pub fn unbarriered_load_gc_ref(
-    func_env: &FuncEnvironment<'_>,
+    func_env: &mut FuncEnvironment<'_>,
     builder: &mut FunctionBuilder,
     ty: WasmHeapType,
     ptr_to_gc_ref: ir::Value,
     flags: ir::MemFlags,
 ) -> WasmResult<ir::Value> {
     let ref_ty = func_env.reference_type(ty);
+	#[cfg(feature = "wa2x-test")]
+	let gc_ref = func_env.build_load_with_debug(
+		builder, 
+		ir::types::I32, 
+		flags, 
+		ptr_to_gc_ref, 
+		0
+	);
+	#[cfg(not(feature = "wa2x-test"))]
     let gc_ref = builder.ins().load(ir::types::I32, flags, ptr_to_gc_ref, 0);
     let gc_ref = if ref_ty.bytes() > ir::types::I32.bytes() {
         builder.ins().uextend(ref_ty.as_int(), gc_ref)
@@ -31,7 +40,7 @@ pub fn unbarriered_load_gc_ref(
 }
 
 pub fn unbarriered_store_gc_ref(
-    func_env: &FuncEnvironment<'_>,
+    func_env: &mut FuncEnvironment<'_>,
     builder: &mut FunctionBuilder,
     ty: WasmHeapType,
     dst: ir::Value,
@@ -48,6 +57,9 @@ pub fn unbarriered_store_gc_ref(
         assert_eq!(ref_ty.bytes(), ir::types::I32.bytes());
         gc_ref
     };
+	#[cfg(feature = "wa2x-test")]
+	func_env.build_store_with_debug(builder, flags, gc_ref, dst, 0);
+	#[cfg(not(feature = "wa2x-test"))]
     builder.ins().store(flags, gc_ref, dst, 0);
     Ok(())
 }

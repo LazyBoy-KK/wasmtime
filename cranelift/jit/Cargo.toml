@@ -37,6 +37,7 @@ features = [
 [features]
 selinux-fix = ['memmap2']
 default = []
+wa2x-test = []
 
 [dev-dependencies]
 cranelift = { path = "../umbrella" }

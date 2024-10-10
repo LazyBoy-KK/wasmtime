@@ -29,3 +29,4 @@ cranelift-codegen = { workspace = true, features = ['x86'] }
 default = ["std"]
 std = ["cranelift-codegen/std"]
 core = ["hashbrown", "cranelift-codegen/core"]
+wa2x-test = []

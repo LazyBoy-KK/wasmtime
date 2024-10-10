@@ -612,6 +612,17 @@ impl<'a> FunctionBuilder<'a> {
         self.func.create_global_value(data)
     }
 
+	#[cfg(feature = "wa2x-test")]
+	/// Return true if global value data is load
+	pub fn is_load_global_value(&self, val: GlobalValue) -> bool {
+		let data = &self.func.global_values[val];
+		if let GlobalValueData::Load { .. } = data {
+			true
+		} else {
+			false
+		}
+	}
+
     /// Returns an object with the [`InstBuilder`]
     /// trait that allows to conveniently append an instruction to the current [`Block`] being built.
     pub fn ins<'short>(&'short mut self) -> FuncInstBuilder<'short, 'a> {

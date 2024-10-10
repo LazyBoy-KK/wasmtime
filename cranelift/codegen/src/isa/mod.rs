@@ -46,6 +46,8 @@
 use crate::dominator_tree::DominatorTree;
 pub use crate::isa::call_conv::CallConv;
 
+#[cfg(feature = "wa2x-test")]
+use crate::debug_ctx::DebugCtx;
 use crate::flowgraph;
 use crate::ir::{self, Function, Type};
 #[cfg(feature = "unwind")]
@@ -294,6 +296,8 @@ pub trait TargetIsa: fmt::Display + Send + Sync {
         domtree: &DominatorTree,
         want_disasm: bool,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> CodegenResult<CompiledCodeStencil>;
 
     #[cfg(feature = "unwind")]

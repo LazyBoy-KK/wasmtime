@@ -17,6 +17,8 @@ use cranelift_wasm::{
     TypeIndex, WasmHeapTopType, WasmHeapType, WasmResult,
 };
 use std::mem;
+#[cfg(feature = "wa2x-test")]
+use std::panic::Location;
 use wasmparser::Operator;
 use wasmtime_environ::{
     BuiltinFunctionIndex, MemoryPlan, MemoryStyle, Module, ModuleTranslation, ModuleTypesBuilder,
@@ -136,6 +138,9 @@ pub struct FuncEnvironment<'module_environment> {
 
     fuel_consumed: i64,
 
+	#[cfg(feature = "wa2x-test")]
+	state: Option<&'module_environment mut FuncTranslationState>,
+
     #[cfg(feature = "wmemcheck")]
     wmemcheck: bool,
 }
@@ -174,12 +179,214 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
             // functions should consume at least some fuel.
             fuel_consumed: 1,
 
+			#[cfg(feature = "wa2x-test")]
+			state: None,
             #[cfg(feature = "wmemcheck")]
             wmemcheck,
             #[cfg(feature = "wmemcheck")]
             translation,
         }
     }
+
+	#[cfg(feature = "wa2x-test")]
+	pub fn new_with_debug(
+        isa: &'module_environment (dyn TargetIsa + 'module_environment),
+        translation: &'module_environment ModuleTranslation<'module_environment>,
+        types: &'module_environment ModuleTypesBuilder,
+        tunables: &'module_environment Tunables,
+		state: &'module_environment mut FuncTranslationState,
+        wmemcheck: bool,
+    ) -> Self {
+        let builtin_functions = BuiltinFunctions::new(isa);
+
+        // Avoid unused warning in default build.
+        #[cfg(not(feature = "wmemcheck"))]
+        let _ = wmemcheck;
+
+        Self {
+            isa,
+            module: &translation.module,
+            types,
+            heaps: PrimaryMap::default(),
+            tables: SecondaryMap::default(),
+            vmctx: None,
+            pcc_vmctx_memtype: None,
+            builtin_functions,
+            offsets: VMOffsets::new(isa.pointer_bytes(), &translation.module),
+            tunables,
+            fuel_var: Variable::new(0),
+            epoch_deadline_var: Variable::new(0),
+            epoch_ptr_var: Variable::new(0),
+            vmruntime_limits_ptr: ir::Value::reserved_value(),
+
+            // Start with at least one fuel being consumed because even empty
+            // functions should consume at least some fuel.
+            fuel_consumed: 1,
+
+			state: Some(state),
+            #[cfg(feature = "wmemcheck")]
+            wmemcheck,
+            #[cfg(feature = "wmemcheck")]
+            translation,
+        }
+    }
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_load_with_debug<T1, T2>(
+		&mut self,
+		builder: &mut FunctionBuilder,
+		mem: ir::Type,
+		mem_flags: T1,
+		p: ir::Value,
+		offset: T2,
+	) -> ir::Value 
+	where 
+		T1: Into<ir::MemFlags>,
+		T2: Into<ir::immediates::Offset32>
+	{
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(builder, "Load", source_location);
+		}
+		builder
+			.ins()
+			.load(mem, mem_flags, p, offset)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_cursor_load_with_debug<T1, T2>(
+		&mut self,
+		pos: &mut FuncCursor,
+		mem: ir::Type,
+		mem_flags: T1,
+		p: ir::Value,
+		offset: T2,
+	) -> ir::Value 
+	where 
+		T1: Into<ir::MemFlags>,
+		T2: Into<ir::immediates::Offset32>
+	{
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info_cursor(pos, "Load", source_location);
+		}
+		pos.ins().load(mem, mem_flags, p, offset)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_store_with_debug<T1, T2>(
+		&mut self,
+		builder: &mut FunctionBuilder,
+		mem_flags: T1,
+		x: ir::Value,
+		p: ir::Value,
+		offset: T2,
+	) -> ir::Inst 
+	where 
+		T1: Into<ir::MemFlags>,
+		T2: Into<ir::immediates::Offset32>
+	{
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(builder, "Load", source_location);
+		}
+		builder
+			.ins()
+			.store(mem_flags, x, p, offset)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_brif_with_debug(
+		&mut self, 
+		builder: &mut FunctionBuilder,
+		c: ir::Value,
+		block_then_label: ir::Block,
+		block_then_args: &[ir::Value],
+		block_else_label: ir::Block,
+		block_else_args: &[ir::Value],
+	) -> ir::Inst {
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(builder, "CondBranch", source_location);
+		}
+		builder
+			.ins()
+			.brif(c, block_then_label, block_then_args, block_else_label, block_else_args)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_trap_with_debug<T1: Into<ir::TrapCode>>(
+		&mut self, 
+		builder: &mut FunctionBuilder,
+		nz: bool,
+		c: ir::Value,
+		code: T1
+	) -> ir::Inst {
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(builder, "CondBranch", source_location);
+		}
+
+		if nz {
+			builder.ins().trapnz(c, code)
+		} else {
+			builder.ins().trapz(c, code)
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_jump_with_debug(
+		&mut self, 
+		builder: &mut FunctionBuilder,
+		block_call_label: ir::Block,
+		block_call_args: &[ir::Value],
+	) -> ir::Inst {
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(builder, "UncondBranch", source_location);
+		}
+		builder
+			.ins()
+			.jump(block_call_label, block_call_args)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_call_with_debug(
+		&mut self, 
+		builder: &mut FunctionBuilder,
+		func: ir::FuncRef,
+		args: &[ir::Value],
+	) -> ir::Inst {
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(builder, "Call", source_location);
+		}
+		builder
+			.ins()
+			.call(func, args)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	pub fn build_cursor_call_with_debug(
+		&mut self, 
+		pos: &mut FuncCursor,
+		func: ir::FuncRef,
+		args: &[ir::Value],
+	) -> ir::Inst {
+		if let Some(state) = self.state.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info_cursor(pos, "Call", source_location);
+		}
+		pos.ins().call(func, args)
+	}
 
     pub(crate) fn pointer_type(&self) -> ir::Type {
         self.isa.pointer_type()
@@ -283,10 +490,20 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         let base = builder.ins().global_value(pointer_type, vmctx);
         let offset = i32::from(self.offsets.ptr.vmctx_runtime_limits());
         debug_assert!(self.vmruntime_limits_ptr.is_reserved_value());
-        self.vmruntime_limits_ptr =
+		#[cfg(feature = "wa2x-test")]
+		let vmruntime_limits_ptr = self.build_load_with_debug(
+			builder, 
+			pointer_type, 
+			ir::MemFlags::trusted(), 
+			base, 
+			offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
+        let vmruntime_limits_ptr =
             builder
                 .ins()
                 .load(pointer_type, ir::MemFlags::trusted(), base, offset);
+		self.vmruntime_limits_ptr = vmruntime_limits_ptr;
     }
 
     fn fuel_function_entry(&mut self, builder: &mut FunctionBuilder<'_>) {
@@ -434,6 +651,15 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
     /// Loads the fuel consumption value from `VMRuntimeLimits` into `self.fuel_var`
     fn fuel_load_into_var(&mut self, builder: &mut FunctionBuilder<'_>) {
         let (addr, offset) = self.fuel_addr_offset();
+		#[cfg(feature = "wa2x-test")]
+		let fuel = self.build_load_with_debug(
+			builder, 
+			ir::types::I64, 
+			ir::MemFlags::trusted(), 
+			addr, 
+			offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let fuel = builder
             .ins()
             .load(ir::types::I64, ir::MemFlags::trusted(), addr, offset);
@@ -445,6 +671,15 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
     fn fuel_save_from_var(&mut self, builder: &mut FunctionBuilder<'_>) {
         let (addr, offset) = self.fuel_addr_offset();
         let fuel_consumed = builder.use_var(self.fuel_var);
+		#[cfg(feature = "wa2x-test")]
+		self.build_store_with_debug(
+			builder,
+			ir::MemFlags::trusted(), 
+			fuel_consumed, 
+			addr, 
+			offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         builder
             .ins()
             .store(ir::MemFlags::trusted(), fuel_consumed, addr, offset);
@@ -478,6 +713,16 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         let cmp = builder
             .ins()
             .icmp(IntCC::SignedGreaterThanOrEqual, fuel, zero);
+		#[cfg(feature = "wa2x-test")]
+		self.build_brif_with_debug(
+			builder, 
+			cmp, 
+			out_of_gas_block, 
+			&[], 
+			continuation_block, 
+			&[]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         builder
             .ins()
             .brif(cmp, out_of_gas_block, &[], continuation_block, &[]);
@@ -494,8 +739,14 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         self.fuel_save_from_var(builder);
         let out_of_gas = self.builtin_functions.out_of_gas(builder.func);
         let vmctx = self.vmctx_val(&mut builder.cursor());
+		#[cfg(feature = "wa2x-test")]
+		self.build_call_with_debug(builder, out_of_gas, &[vmctx]);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().call(out_of_gas, &[vmctx]);
         self.fuel_load_into_var(builder);
+		#[cfg(feature = "wa2x-test")]
+		self.build_jump_with_debug(builder, continuation_block, &[]);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().jump(continuation_block, &[]);
         builder.seal_block(continuation_block);
 
@@ -578,6 +829,15 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         let pointer_type = self.pointer_type();
         let base = builder.ins().global_value(pointer_type, vmctx);
         let offset = i32::try_from(self.offsets.ptr.vmctx_epoch_ptr()).unwrap();
+		#[cfg(feature = "wa2x-test")]
+		let epoch_ptr = self.build_load_with_debug(
+			builder, 
+			pointer_type, 
+			ir::MemFlags::trusted(), 
+			base, 
+			offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let epoch_ptr = builder
             .ins()
             .load(pointer_type, ir::MemFlags::trusted(), base, offset);
@@ -586,12 +846,25 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
 
     fn epoch_load_current(&mut self, builder: &mut FunctionBuilder<'_>) -> ir::Value {
         let addr = builder.use_var(self.epoch_ptr_var);
-        builder.ins().load(
-            ir::types::I64,
-            ir::MemFlags::trusted(),
-            addr,
-            ir::immediates::Offset32::new(0),
-        )
+		#[cfg(feature = "wa2x-test")]
+		{
+			self.build_load_with_debug(
+				builder, 
+				ir::types::I64, 
+				ir::MemFlags::trusted(), 
+				addr, 
+				ir::immediates::Offset32::new(0)
+			)
+		}
+		#[cfg(not(feature = "wa2x-test"))]
+		{
+			builder.ins().load(
+				ir::types::I64,
+				ir::MemFlags::trusted(),
+				addr,
+				ir::immediates::Offset32::new(0),
+			)
+		}
     }
 
     fn epoch_check(&mut self, builder: &mut FunctionBuilder<'_>) {
@@ -623,6 +896,16 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
             cur_epoch_value,
             epoch_deadline,
         );
+		#[cfg(feature = "wa2x-test")]
+		self.build_brif_with_debug(
+			builder, 
+			cmp, 
+			new_epoch_block, 
+			&[], 
+			continuation_block, 
+			&[]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         builder
             .ins()
             .brif(cmp, new_epoch_block, &[], continuation_block, &[]);
@@ -640,6 +923,17 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         // We keep the deadline cached in a register to speed the checks
         // in the common case (between epoch ticks) but we want to do a
         // precise check here by reloading the cache first.
+		#[cfg(feature = "wa2x-test")]
+		let deadline = self.build_load_with_debug(
+			builder,
+			ir::types::I64,
+			ir::MemFlags::trusted(),
+			self.vmruntime_limits_ptr,
+			ir::immediates::Offset32::new(
+				self.offsets.ptr.vmruntime_limits_epoch_deadline() as i32
+			),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let deadline =
             builder.ins().load(
                 ir::types::I64,
@@ -656,9 +950,15 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         let vmctx = self.vmctx_val(&mut builder.cursor());
         // new_epoch() returns the new deadline, so we don't have to
         // reload it.
+		#[cfg(feature = "wa2x-test")]
+		let call = self.build_call_with_debug(builder, new_epoch, &[vmctx]);
+		#[cfg(not(feature = "wa2x-test"))]
         let call = builder.ins().call(new_epoch, &[vmctx]);
         let new_deadline = *builder.func.dfg.inst_results(call).first().unwrap();
         builder.def_var(self.epoch_deadline_var, new_deadline);
+		#[cfg(feature = "wa2x-test")]
+		self.build_jump_with_debug(builder, continuation_block, &[]);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().jump(continuation_block, &[]);
         builder.seal_block(continuation_block);
 
@@ -838,12 +1138,30 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         // contents, we check for a null entry here, and
         // if null, we take a slow-path that invokes a
         // libcall.
+		#[cfg(feature = "wa2x-test")]
+		let (table_entry_addr, flags) = table_data.prepare_table_addr_with_debug(
+			builder, 
+			&mut self.state, 
+			index, 
+			pointer_type,
+            self.isa.flags().enable_table_access_spectre_mitigation(),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let (table_entry_addr, flags) = table_data.prepare_table_addr(
             builder,
             index,
             pointer_type,
             self.isa.flags().enable_table_access_spectre_mitigation(),
         );
+		#[cfg(feature = "wa2x-test")]
+		let value = self.build_load_with_debug(
+			builder,
+			pointer_type, 
+			flags, 
+			table_entry_addr, 
+			0
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let value = builder.ins().load(pointer_type, flags, table_entry_addr, 0);
 
         if !lazy_init {
@@ -868,6 +1186,16 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
         let result_param = builder.append_block_param(continuation_block, pointer_type);
         builder.set_cold_block(null_block);
 
+		#[cfg(feature = "wa2x-test")]
+		self.build_brif_with_debug(
+			builder, 
+			value, 
+			continuation_block, 
+			&[value_masked], 
+			null_block, 
+			&[]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         builder
             .ins()
             .brif(value, continuation_block, &[value_masked], null_block, &[]);
@@ -879,8 +1207,22 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
             .builtin_functions
             .table_get_lazy_init_func_ref(builder.func);
         let vmctx = self.vmctx_val(&mut builder.cursor());
+		#[cfg(feature = "wa2x-test")]
+		let call_inst = self.build_call_with_debug(
+			builder, 
+			lazy_init, 
+			&[vmctx, table_index, index]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let call_inst = builder.ins().call(lazy_init, &[vmctx, table_index, index]);
         let returned_entry = builder.func.dfg.inst_results(call_inst)[0];
+		#[cfg(feature = "wa2x-test")]
+		self.build_jump_with_debug(
+			builder, 
+			continuation_block, 
+			&[returned_entry]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().jump(continuation_block, &[returned_entry]);
         builder.seal_block(continuation_block);
 
@@ -1030,6 +1372,8 @@ struct Call<'a, 'func, 'module_env> {
     builder: &'a mut FunctionBuilder<'func>,
     env: &'a mut FuncEnvironment<'module_env>,
     tail: bool,
+	#[cfg(feature = "wa2x-test")]
+	debug_ctx: Option<(&'a mut FuncTranslationState, &'a Location<'a>)>,
 }
 
 enum CheckIndirectCallTypeSignature {
@@ -1052,6 +1396,8 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
             builder,
             env,
             tail: false,
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx: None,
         }
     }
 
@@ -1064,8 +1410,63 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
             builder,
             env,
             tail: true,
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx: None,
         }
     }
+
+	#[cfg(feature = "wa2x-test")]
+	pub fn new_with_debug(
+		builder: &'a mut FunctionBuilder<'func>,
+		env: &'a mut FuncEnvironment<'module_env>,
+		state: &'a mut FuncTranslationState,
+		ir_loc: &'a Location<'a>
+	) -> Self {
+		Call {
+			builder,
+			env,
+			tail: false,
+			debug_ctx: Some((state, ir_loc)),
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	fn build_load_with_debug<T1, T2>(
+		&mut self,
+		mem: ir::Type,
+		mem_flags: T1,
+		p: ir::Value,
+		offset: T2,
+	) -> ir::Value 
+	where 
+		T1: Into<ir::MemFlags>,
+		T2: Into<ir::immediates::Offset32>
+	{
+		if let Some((state, _)) = self.debug_ctx.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(&mut self.builder, "Load", source_location);
+		}
+		self.builder
+			.ins()
+			.load(mem, mem_flags, p, offset)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	fn build_trap_with_debug<T1: Into<ir::TrapCode>>(
+		&mut self,
+		c: ir::Value,
+		code: T1,
+	) -> ir::Inst {
+		if let Some((state, _)) = self.debug_ctx.as_mut() {
+			let source_location = std::panic::Location::caller();
+			state.add_debug_info(&mut self.builder, "CondBranch", source_location);
+		}
+		self.builder
+			.ins()
+			.trapz(c, code)
+	}
 
     /// Do a direct call to the given callee function.
     pub fn direct_call(
@@ -1113,6 +1514,14 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
                 .vmctx_vmfunction_import_wasm_call(callee_index),
         )
         .unwrap();
+		#[cfg(feature = "wa2x-test")]
+		let func_addr = self.build_load_with_debug(
+			pointer_type, 
+			mem_flags, 
+			base, 
+			body_offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let func_addr = self
             .builder
             .ins()
@@ -1121,6 +1530,14 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         // First append the callee vmctx address.
         let vmctx_offset =
             i32::try_from(self.env.offsets.vmctx_vmfunction_import_vmctx(callee_index)).unwrap();
+		#[cfg(feature = "wa2x-test")]
+		let vmctx = self.build_load_with_debug(
+			pointer_type, 
+			mem_flags, 
+			base, 
+			vmctx_offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let vmctx = self
             .builder
             .ins()
@@ -1257,6 +1674,14 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
                 // succeeds then we know it won't match, so trap anyway.
                 if table.table.wasm_ty.nullable {
                     let mem_flags = ir::MemFlags::trusted().with_readonly();
+					#[cfg(feature = "wa2x-test")]
+					self.build_load_with_debug(
+						sig_id_type, 
+						mem_flags.with_trap_code(Some(ir::TrapCode::IndirectCallToNull)), 
+						funcref_ptr, 
+						i32::from(self.env.offsets.ptr.vm_func_ref_type_index()),
+					);
+					#[cfg(not(feature = "wa2x-test"))]
                     self.builder.ins().load(
                         sig_id_type,
                         mem_flags.with_trap_code(Some(ir::TrapCode::IndirectCallToNull)),
@@ -1302,6 +1727,14 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         // pointer from `VMContext` and then loading, based on `SignatureIndex`,
         // the corresponding entry.
         let mem_flags = ir::MemFlags::trusted().with_readonly();
+		#[cfg(feature = "wa2x-test")]
+		let signatures = self.build_load_with_debug(
+			pointer_type, 
+			mem_flags, 
+			base, 
+			i32::from(self.env.offsets.ptr.vmctx_type_ids_array()),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let signatures = self.builder.ins().load(
             pointer_type,
             mem_flags,
@@ -1311,6 +1744,14 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         let sig_index = self.env.module.types[ty_index];
         let offset =
             i32::try_from(sig_index.as_u32().checked_mul(sig_id_type.bytes()).unwrap()).unwrap();
+		#[cfg(feature = "wa2x-test")]
+		let caller_sig_id = self.build_load_with_debug(
+			sig_id_type, 
+			mem_flags, 
+			signatures, 
+			offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let caller_sig_id = self
             .builder
             .ins()
@@ -1321,6 +1762,14 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         // Note that the callee may be null in which case this load may
         // trap. If so use the `IndirectCallToNull` trap code.
         let mem_flags = ir::MemFlags::trusted().with_readonly();
+		#[cfg(feature = "wa2x-test")]
+		let callee_sig_id = self.build_load_with_debug(
+			sig_id_type,
+            mem_flags.with_trap_code(Some(ir::TrapCode::IndirectCallToNull)),
+            funcref_ptr,
+            i32::from(self.env.offsets.ptr.vm_func_ref_type_index()),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let callee_sig_id = self.builder.ins().load(
             sig_id_type,
             mem_flags.with_trap_code(Some(ir::TrapCode::IndirectCallToNull)),
@@ -1333,6 +1782,9 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
             .builder
             .ins()
             .icmp(IntCC::Equal, callee_sig_id, caller_sig_id);
+		#[cfg(feature = "wa2x-test")]
+		self.build_trap_with_debug(cmp, ir::TrapCode::BadSignature);
+		#[cfg(not(feature = "wa2x-test"))]
         self.builder.ins().trapz(cmp, ir::TrapCode::BadSignature);
         CheckIndirectCallTypeSignature::Runtime
     }
@@ -1386,12 +1838,28 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         // will handle the case where this is either already known to be
         // non-null or may trap.
         let mem_flags = ir::MemFlags::trusted().with_readonly();
+		#[cfg(feature = "wa2x-test")]
+		let func_addr = self.build_load_with_debug(
+			pointer_type,
+            mem_flags.with_trap_code(callee_load_trap_code),
+            callee,
+            i32::from(self.env.offsets.ptr.vm_func_ref_wasm_call()),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let func_addr = self.builder.ins().load(
             pointer_type,
             mem_flags.with_trap_code(callee_load_trap_code),
             callee,
             i32::from(self.env.offsets.ptr.vm_func_ref_wasm_call()),
         );
+		#[cfg(feature = "wa2x-test")]
+		let callee_vmctx = self.build_load_with_debug(
+			pointer_type,
+            mem_flags,
+            callee,
+            i32::from(self.env.offsets.ptr.vm_func_ref_vmctx()),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let callee_vmctx = self.builder.ins().load(
             pointer_type,
             mem_flags,
@@ -1430,6 +1898,10 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
     }
 
     fn direct_call_inst(&mut self, callee: ir::FuncRef, args: &[ir::Value]) -> ir::Inst {
+		#[cfg(feature = "wa2x-test")]
+		if let Some((state, ir_loc)) = self.debug_ctx.as_mut() {
+			state.add_debug_info(self.builder, "Call", ir_loc);
+		}
         if self.tail {
             self.builder.ins().return_call(callee, args)
         } else {
@@ -1443,6 +1915,10 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
         func_addr: ir::Value,
         args: &[ir::Value],
     ) -> ir::Inst {
+		#[cfg(feature = "wa2x-test")]
+		if let Some((state, ir_loc)) = self.debug_ctx.as_mut() {
+			state.add_debug_info(self.builder, "IndirectCall", ir_loc);
+		}
         if self.tail {
             self.builder
                 .ins()
@@ -1517,6 +1993,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let vmctx = self.vmctx_val(&mut pos);
 
         let table_index_arg = pos.ins().iconst(I32, table_index.as_u32() as i64);
+		#[cfg(feature = "wa2x-test")]
+		let call_inst = self.build_cursor_call_with_debug(
+			&mut pos, 
+			grow, 
+			&[vmctx, table_index_arg, delta, init_value]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let call_inst = pos
             .ins()
             .call(grow, &[vmctx, table_index_arg, delta, init_value]);
@@ -1625,6 +2108,15 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
             WasmHeapTopType::Func => {
                 match plan.style {
                     TableStyle::CallerChecksSignature { lazy_init } => {
+						#[cfg(feature = "wa2x-test")]
+						let (elem_addr, flags) = table_data.prepare_table_addr_with_debug(
+                            builder,
+							&mut self.state,
+                            index,
+                            pointer_type,
+                            self.isa.flags().enable_table_access_spectre_mitigation(),
+                        );
+						#[cfg(not(feature = "wa2x-test"))]
                         let (elem_addr, flags) = table_data.prepare_table_addr(
                             builder,
                             index,
@@ -1641,7 +2133,16 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                         } else {
                             value
                         };
-                        builder
+						#[cfg(feature = "wa2x-test")]
+						self.build_store_with_debug(
+							builder, 
+							flags, 
+							value_with_init_bit, 
+							elem_addr, 
+							0
+						);
+						#[cfg(not(feature = "wa2x-test"))]
+						builder
                             .ins()
                             .store(flags, value_with_init_bit, elem_addr, 0);
                         Ok(())
@@ -1670,6 +2171,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let vmctx = self.vmctx_val(&mut pos);
 
         let table_index_arg = pos.ins().iconst(I32, table_index.as_u32() as i64);
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			libcall, 
+			&[vmctx, table_index_arg, dst, val, len]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins()
             .call(libcall, &[vmctx, table_index_arg, dst, val, len]);
 
@@ -1752,6 +2260,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let ref_func = self.builtin_functions.ref_func(&mut pos.func);
         let vmctx = self.vmctx_val(&mut pos);
 
+		#[cfg(feature = "wa2x-test")]
+		let call_inst = self.build_cursor_call_with_debug(
+			&mut pos, 
+			ref_func, 
+			&[vmctx, func_index]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let call_inst = pos.ins().call(ref_func, &[vmctx, func_index]);
         Ok(pos.func.dfg.first_result(call_inst))
     }
@@ -1774,6 +2289,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let vmctx = self.vmctx_val(&mut pos);
 
         let global_index_arg = pos.ins().iconst(I32, index.as_u32() as i64);
+		#[cfg(feature = "wa2x-test")]
+		let call_inst = self.build_cursor_call_with_debug(
+			&mut pos, 
+			libcall, 
+			&[vmctx, global_index_arg]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let call_inst = pos.ins().call(libcall, &[vmctx, global_index_arg]);
 
         Ok(pos.func.dfg.first_result(call_inst))
@@ -1798,6 +2320,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let vmctx = self.vmctx_val(&mut pos);
 
         let global_index_arg = pos.ins().iconst(I32, index.as_u32() as i64);
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			libcall, 
+			&[vmctx, global_index_arg, value]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins().call(libcall, &[vmctx, global_index_arg, value]);
 
         Ok(())
@@ -2151,6 +2680,50 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         Call::new(builder, self).call_ref(sig_ref, callee, call_args)
     }
 
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	fn translate_call_with_debug(
+		&mut self,
+        builder: &mut FunctionBuilder,
+		state: &mut FuncTranslationState,
+        callee_index: FuncIndex,
+        callee: ir::FuncRef,
+        call_args: &[ir::Value],
+	)-> WasmResult<ir::Inst> {
+		let source_location = std::panic::Location::caller();
+		Call::new_with_debug(builder, self, state, source_location).direct_call(callee_index, callee, call_args)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	fn translate_call_indirect_with_debug(
+		&mut self,
+		builder: &mut FunctionBuilder,
+		state: &mut FuncTranslationState,
+        table_index: TableIndex,
+        ty_index: TypeIndex,
+        sig_ref: ir::SigRef,
+        callee: ir::Value,
+        call_args: &[ir::Value],
+	) -> WasmResult<Option<ir::Inst>> {
+		let source_location = std::panic::Location::caller();
+		Call::new_with_debug(builder, self, state, source_location).indirect_call(table_index, ty_index, sig_ref, callee, call_args)
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	#[track_caller]
+	fn translate_call_ref_with_debug(
+		&mut self,
+		builder: &mut FunctionBuilder,
+		state: &mut FuncTranslationState,
+        sig_ref: ir::SigRef,
+        callee: ir::Value,
+        call_args: &[ir::Value],
+    ) -> WasmResult<ir::Inst> {
+		let source_location = std::panic::Location::caller();
+		Call::new_with_debug(builder, self, state, source_location).call_ref(sig_ref, callee, call_args)
+	}
+
     fn translate_return_call(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -2206,6 +2779,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let vmctx = self.vmctx_val(&mut pos);
 
         let val = self.cast_memory_index_to_i64(&mut pos, val, index);
+		#[cfg(feature = "wa2x-test")]
+		let call_inst = self.build_cursor_call_with_debug(
+			&mut pos, 
+			memory_grow, 
+			&[vmctx, val, memory_index]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let call_inst = pos.ins().call(memory_grow, &[vmctx, val, memory_index]);
         let result = *pos.func.dfg.inst_results(call_inst).first().unwrap();
         Ok(self.convert_memory_length_to_index_type(pos, result, index))
@@ -2251,12 +2831,34 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                             .vmctx_vmmemory_definition_current_length(owned_index),
                     )
                     .unwrap();
-                    pos.ins()
-                        .load(pointer_type, ir::MemFlags::trusted(), base, offset)
+					#[cfg(feature = "wa2x-test")]
+					{
+						self.build_cursor_load_with_debug(
+							&mut pos, 
+							pointer_type, 
+							ir::MemFlags::trusted(), 
+							base, 
+							offset
+						)
+					}
+					#[cfg(not(feature = "wa2x-test"))]
+					{
+						pos.ins()
+							.load(pointer_type, ir::MemFlags::trusted(), base, offset)
+					}
                 }
             }
             None => {
                 let offset = i32::try_from(self.offsets.vmctx_vmmemory_import_from(index)).unwrap();
+				#[cfg(feature = "wa2x-test")]
+				let vmmemory_ptr = self.build_cursor_load_with_debug(
+					&mut pos, 
+					pointer_type, 
+					ir::MemFlags::trusted(), 
+					base, 
+					offset
+				);
+				#[cfg(not(feature = "wa2x-test"))]
                 let vmmemory_ptr =
                     pos.ins()
                         .load(pointer_type, ir::MemFlags::trusted(), base, offset);
@@ -2271,12 +2873,25 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
                         vmmemory_definition_ptr,
                     )
                 } else {
-                    pos.ins().load(
-                        pointer_type,
-                        ir::MemFlags::trusted(),
-                        vmmemory_ptr,
-                        i32::from(self.offsets.ptr.vmmemory_definition_current_length()),
-                    )
+					#[cfg(feature = "wa2x-test")]
+					{
+						self.build_cursor_load_with_debug(
+							&mut pos, 
+							pointer_type, 
+							ir::MemFlags::trusted(), 
+							vmmemory_ptr, 
+							i32::from(self.offsets.ptr.vmmemory_definition_current_length()),
+						)
+					}
+					#[cfg(not(feature = "wa2x-test"))]
+					{
+						pos.ins().load(
+							pointer_type,
+							ir::MemFlags::trusted(),
+							vmmemory_ptr,
+							i32::from(self.offsets.ptr.vmmemory_definition_current_length()),
+						)
+					}
                 }
             }
         };
@@ -2317,6 +2932,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         };
         let src_index = pos.ins().iconst(I32, i64::from(src_index.as_u32()));
         let dst_index = pos.ins().iconst(I32, i64::from(dst_index.as_u32()));
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			memory_copy, 
+			&[vmctx, dst_index, dst, src_index, src, len]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins()
             .call(memory_copy, &[vmctx, dst_index, dst, src_index, src, len]);
 
@@ -2339,6 +2961,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
         let vmctx = self.vmctx_val(&mut pos);
 
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			memory_fill, 
+			&[vmctx, memory_index_arg, dst, val, len]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins()
             .call(memory_fill, &[vmctx, memory_index_arg, dst, val, len]);
 
@@ -2364,6 +2993,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
         let dst = self.cast_memory_index_to_i64(&mut pos, dst, memory_index);
 
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			memory_init, 
+			&[vmctx, memory_index_arg, seg_index_arg, dst, src, len],
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins().call(
             memory_init,
             &[vmctx, memory_index_arg, seg_index_arg, dst, src, len],
@@ -2376,6 +3012,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let data_drop = self.builtin_functions.data_drop(&mut pos.func);
         let seg_index_arg = pos.ins().iconst(I32, seg_index as i64);
         let vmctx = self.vmctx_val(&mut pos);
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			data_drop, 
+			&[vmctx, seg_index_arg]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins().call(data_drop, &[vmctx, seg_index_arg]);
         Ok(())
     }
@@ -2405,6 +3048,20 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let dst_table_index_arg = pos.ins().iconst(I32, dst_table_index_arg as i64);
         let src_table_index_arg = pos.ins().iconst(I32, src_table_index_arg as i64);
         let vmctx = self.vmctx_val(&mut pos);
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			table_copy,
+            &[
+                vmctx,
+                dst_table_index_arg,
+                src_table_index_arg,
+                dst,
+                src,
+                len,
+            ],
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins().call(
             table_copy,
             &[
@@ -2433,6 +3090,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let table_index_arg = pos.ins().iconst(I32, i64::from(table_index.as_u32()));
         let seg_index_arg = pos.ins().iconst(I32, i64::from(seg_index));
         let vmctx = self.vmctx_val(&mut pos);
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			table_init,
+            &[vmctx, table_index_arg, seg_index_arg, dst, src, len],
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins().call(
             table_init,
             &[vmctx, table_index_arg, seg_index_arg, dst, src, len],
@@ -2445,6 +3109,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
         let elem_drop = self.builtin_functions.elem_drop(&mut pos.func);
         let elem_index_arg = pos.ins().iconst(I32, elem_index as i64);
         let vmctx = self.vmctx_val(&mut pos);
+		#[cfg(feature = "wa2x-test")]
+		self.build_cursor_call_with_debug(
+			&mut pos, 
+			elem_drop, 
+			&[vmctx, elem_index_arg]
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins().call(elem_drop, &[vmctx, elem_index_arg]);
         Ok(())
     }
@@ -2469,6 +3140,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
             let vmctx = self.vmctx_val(&mut pos);
 
+			#[cfg(feature = "wa2x-test")]
+			let call_inst = self.build_cursor_call_with_debug(
+				&mut pos, 
+				wait_func,
+                &[vmctx, memory_index_arg, addr, expected, timeout],
+			);
+			#[cfg(not(feature = "wa2x-test"))]
             let call_inst = pos.ins().call(
                 wait_func,
                 &[vmctx, memory_index_arg, addr, expected, timeout],
@@ -2500,6 +3178,13 @@ impl<'module_environment> cranelift_wasm::FuncEnvironment for FuncEnvironment<'m
 
             let memory_index_arg = pos.ins().iconst(I32, memory_index.index() as i64);
             let vmctx = self.vmctx_val(&mut pos);
+			#[cfg(feature = "wa2x-test")]
+			let call_inst = self.build_cursor_call_with_debug(
+				&mut pos, 
+				atomic_notify, 
+				&[vmctx, memory_index_arg, addr, count]
+			);
+			#[cfg(not(feature = "wa2x-test"))]
             let call_inst = pos
                 .ins()
                 .call(atomic_notify, &[vmctx, memory_index_arg, addr, count]);

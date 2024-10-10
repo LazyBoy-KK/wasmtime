@@ -9,6 +9,8 @@
 //! contexts concurrently. Typically, you would have one context per compilation thread and only a
 //! single ISA instance.
 
+#[cfg(feature = "wa2x-test")]
+use crate::debug_ctx::DebugCtx;
 use crate::alias_analysis::AliasAnalysis;
 use crate::dominator_tree::DominatorTree;
 use crate::egraph::EgraphPass;
@@ -129,8 +131,15 @@ impl Context {
         isa: &dyn TargetIsa,
         mem: &mut Vec<u8>,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> CompileResult<&CompiledCode> {
-        let compiled_code = self.compile(isa, ctrl_plane)?;
+        let compiled_code = self.compile(
+			isa, 
+			ctrl_plane,
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx,
+		)?;
         mem.extend_from_slice(compiled_code.code_buffer());
         Ok(compiled_code)
     }
@@ -142,6 +151,8 @@ impl Context {
         &mut self,
         isa: &dyn TargetIsa,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> CodegenResult<CompiledCodeStencil> {
         let _tt = timing::compile();
 
@@ -149,7 +160,14 @@ impl Context {
 
         self.optimize(isa, ctrl_plane)?;
 
-        isa.compile_function(&self.func, &self.domtree, self.want_disasm, ctrl_plane)
+        isa.compile_function(
+			&self.func, 
+			&self.domtree, 
+			self.want_disasm, 
+			ctrl_plane,
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx,
+		)
     }
 
     /// Optimize the function, performing all compilation steps up to
@@ -209,9 +227,11 @@ impl Context {
         &mut self,
         isa: &dyn TargetIsa,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> CompileResult<&CompiledCode> {
         let stencil = self
-            .compile_stencil(isa, ctrl_plane)
+            .compile_stencil(isa, ctrl_plane, #[cfg(feature = "wa2x-test")]debug_ctx)
             .map_err(|error| CompileError {
                 inner: error,
                 func: &self.func,

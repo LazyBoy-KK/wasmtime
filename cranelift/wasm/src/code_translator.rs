@@ -174,11 +174,21 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let val = match state.get_global(builder.func, *global_index, environ)? {
                 GlobalVariable::Const(val) => val,
                 GlobalVariable::Memory { gv, offset, ty } => {
+					#[cfg(feature = "wa2x-test")]
+					let addr = build_global_value(builder, state, environ.pointer_type(), gv);
+					#[cfg(not(feature = "wa2x-test"))]
                     let addr = builder.ins().global_value(environ.pointer_type(), gv);
                     let mut flags = ir::MemFlags::trusted();
                     // Put globals in the "table" abstract heap category as well.
                     flags.set_alias_region(Some(ir::AliasRegion::Table));
-                    builder.ins().load(ty, flags, addr, offset)
+					#[cfg(feature = "wa2x-test")]
+					{
+						build_load(builder, state, ty, flags, addr, offset)
+					}
+					#[cfg(not(feature = "wa2x-test"))]
+					{
+						builder.ins().load(ty, flags, addr, offset)
+					}
                 }
                 GlobalVariable::Custom => environ.translate_custom_global_get(
                     builder.cursor(),
@@ -191,6 +201,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             match state.get_global(builder.func, *global_index, environ)? {
                 GlobalVariable::Const(_) => panic!("global #{} is a constant", *global_index),
                 GlobalVariable::Memory { gv, offset, ty } => {
+					#[cfg(feature = "wa2x-test")]
+					let addr = build_global_value(builder, state, environ.pointer_type(), gv);
+					#[cfg(not(feature = "wa2x-test"))]
                     let addr = builder.ins().global_value(environ.pointer_type(), gv);
                     let mut flags = ir::MemFlags::trusted();
                     // Put globals in the "table" abstract heap category as well.
@@ -201,6 +214,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                         val = optionally_bitcast_vector(val, I8X16, builder);
                     }
                     debug_assert_eq!(ty, builder.func.dfg.value_type(val));
+					#[cfg(feature = "wa2x-test")]
+					build_store(builder, state, flags, val, addr, offset);
+					#[cfg(not(feature = "wa2x-test"))]
                     builder.ins().store(flags, val, addr, offset);
                     environ.update_global(builder, *global_index, val);
                 }
@@ -270,6 +286,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let (params, results) = blocktype_params_results(validator, *blockty)?;
             let loop_body = block_with_params(builder, params.clone(), environ)?;
             let next = block_with_params(builder, results.clone(), environ)?;
+			#[cfg(feature = "wa2x-test")]
+			{
+				let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
+				canonicalise_then_jump_with_debug(
+					builder, 
+					state_debug, 
+					loop_body, 
+					state.peekn(params.len())
+				);
+			}
+			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_then_jump(builder, loop_body, state.peekn(params.len()));
             state.push_loop(loop_body, next, params.len(), results.len());
 
@@ -285,6 +312,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         }
         Operator::If { blockty } => {
             let val = state.pop1();
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
 
             let next_block = builder.create_block();
             let (params, results) = blocktype_params_results(validator, *blockty)?;
@@ -296,6 +325,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 // up discovering an `else`, then we will allocate a block for it
                 // and go back and patch the jump.
                 let destination = block_with_params(builder, results.clone(), environ)?;
+				#[cfg(feature = "wa2x-test")]
+				let branch_inst = canonicalise_brif_with_debug(
+					builder, 
+					state_debug,
+					val, 
+					next_block, 
+					&[], 
+					destination, 
+					state.peekn(params.len())
+				);
+				#[cfg(not(feature = "wa2x-test"))]
                 let branch_inst = canonicalise_brif(
                     builder,
                     val,
@@ -316,6 +356,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 // so we eagerly allocate the `else` block here.
                 let destination = block_with_params(builder, results.clone(), environ)?;
                 let else_block = block_with_params(builder, params.clone(), environ)?;
+				#[cfg(feature = "wa2x-test")]
+				canonicalise_brif_with_debug(
+					builder, 
+					state_debug, 
+					val,
+                    next_block,
+                    &[],
+                    else_block,
+                    state.peekn(params.len()),
+				);
+				#[cfg(not(feature = "wa2x-test"))]
                 canonicalise_brif(
                     builder,
                     val,
@@ -346,6 +397,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             );
         }
         Operator::Else => {
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
             let i = state.control_stack.len() - 1;
             match state.control_stack[i] {
                 ControlStackFrame::If {
@@ -378,6 +431,14 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                                 debug_assert_eq!(params.len(), num_return_values);
                                 let else_block =
                                     block_with_params(builder, params.clone(), environ)?;
+								#[cfg(feature = "wa2x-test")]
+								canonicalise_then_jump_with_debug(
+									builder, 
+									state_debug, 
+									destination, 
+									state.peekn(params.len()),
+								);
+								#[cfg(not(feature = "wa2x-test"))]
                                 canonicalise_then_jump(
                                     builder,
                                     destination,
@@ -394,6 +455,14 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                                 else_block
                             }
                             ElseData::WithElse { else_block } => {
+								#[cfg(feature = "wa2x-test")]
+								canonicalise_then_jump_with_debug(
+									builder, 
+									state_debug, 
+									destination, 
+									state.peekn(num_return_values),
+								);
+								#[cfg(not(feature = "wa2x-test"))]
                                 canonicalise_then_jump(
                                     builder,
                                     destination,
@@ -427,8 +496,18 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let frame = state.control_stack.pop().unwrap();
             let next_block = frame.following_code();
             let return_count = frame.num_return_values();
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
             let return_args = state.peekn_mut(return_count);
 
+			#[cfg(feature = "wa2x-test")]
+			canonicalise_then_jump_with_debug(
+				builder, 
+				state_debug, 
+				next_block, 
+				return_args
+			);
+			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_then_jump(builder, next_block, return_args);
             // You might expect that if we just finished an `if` block that
             // didn't have a corresponding `else` block, then we would clean
@@ -484,7 +563,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 };
                 (return_count, frame.br_destination())
             };
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
             let destination_args = state.peekn_mut(return_count);
+			#[cfg(feature = "wa2x-test")]
+			canonicalise_then_jump_with_debug(
+				builder, 
+				state_debug, 
+				br_destination, 
+				destination_args,
+			);
+			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_then_jump(builder, br_destination, destination_args);
             state.popn(return_count);
             state.reachable = false;
@@ -510,6 +599,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             };
             let val = state.pop1();
             let mut data = Vec::with_capacity(targets.len() as usize);
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
             if jump_args_count == 0 {
                 // No jump arguments
                 for depth in targets.targets() {
@@ -530,6 +621,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 };
                 let block = builder.func.dfg.block_call(block, &[]);
                 let jt = builder.create_jump_table(JumpTableData::new(block, &data));
+				#[cfg(feature = "wa2x-test")]
+				translate_br_table_with_debug(builder, state_debug, val, jt);
+				#[cfg(not(feature = "wa2x-test"))]
                 builder.ins().br_table(val, jt);
             } else {
                 // Here we have jump arguments, but Cranelift's br_table doesn't support them
@@ -559,6 +653,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 };
                 let default_branch_block = builder.func.dfg.block_call(default_branch_block, &[]);
                 let jt = builder.create_jump_table(JumpTableData::new(default_branch_block, &data));
+                #[cfg(feature = "wa2x-test")]
+				translate_br_table_with_debug(builder, state_debug, val, jt);
+				#[cfg(not(feature = "wa2x-test"))]
                 builder.ins().br_table(val, jt);
                 for (depth, dest_block) in dest_block_sequence {
                     builder.switch_to_block(dest_block);
@@ -570,6 +667,14 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                         frame.br_destination()
                     };
                     let destination_args = state.peekn_mut(return_count);
+					#[cfg(feature = "wa2x-test")]
+					canonicalise_then_jump_with_debug(
+						builder, 
+						state_debug, 
+						real_dest_block, 
+						destination_args,
+					);
+					#[cfg(not(feature = "wa2x-test"))]
                     canonicalise_then_jump(builder, real_dest_block, destination_args);
                 }
                 state.popn(return_count);
@@ -582,9 +687,14 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 frame.num_return_values()
             };
             {
+				#[cfg(feature = "wa2x-test")]
+				let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
                 let return_args = state.peekn_mut(return_count);
                 environ.handle_before_return(&return_args, builder);
                 bitcast_wasm_returns(environ, return_args, builder);
+				#[cfg(feature = "wa2x-test")]
+				translate_return_with_debug(builder, state_debug, return_args);
+				#[cfg(not(feature = "wa2x-test"))]
                 builder.ins().return_(return_args);
             }
             state.popn(return_count);
@@ -610,6 +720,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         Operator::Call { function_index } => {
             let (fref, num_args) = state.get_direct_func(builder.func, *function_index, environ)?;
 
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
             // Bitcast any vector arguments to their default type, I8X16, before calling.
             let args = state.peekn_mut(num_args);
             bitcast_wasm_params(
@@ -619,8 +731,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 builder,
             );
 
+			#[cfg(not(feature = "wa2x-test"))]
             let call = environ.translate_call(
                 builder,
+                FuncIndex::from_u32(*function_index),
+                fref,
+                args,
+            )?;
+			#[cfg(feature = "wa2x-test")]
+			let call = environ.translate_call_with_debug(
+                builder,
+				state_debug,
                 FuncIndex::from_u32(*function_index),
                 fref,
                 args,
@@ -646,12 +767,26 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let (sigref, num_args) = state.get_indirect_sig(builder.func, *type_index, environ)?;
             let callee = state.pop1();
 
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
+
             // Bitcast any vector arguments to their default type, I8X16, before calling.
             let args = state.peekn_mut(num_args);
             bitcast_wasm_params(environ, sigref, args, builder);
 
+			#[cfg(not(feature = "wa2x-test"))]
             let call = environ.translate_call_indirect(
                 builder,
+                TableIndex::from_u32(*table_index),
+                TypeIndex::from_u32(*type_index),
+                sigref,
+                callee,
+                state.peekn(num_args),
+            )?;
+			#[cfg(feature = "wa2x-test")]
+			let call = environ.translate_call_indirect_with_debug(
+                builder,
+				state_debug,
                 TableIndex::from_u32(*table_index),
                 TypeIndex::from_u32(*type_index),
                 sigref,
@@ -863,6 +998,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 state,
                 prepare_addr(memarg, 8, builder, state, environ)?
             );
+			#[cfg(feature = "wa2x-test")]
+			let loaded = build_vector_load(builder, state, op, flags, base, 0);
+			#[cfg(not(feature = "wa2x-test"))]
             let loaded = builder.ins().sload8x8(flags, base, 0);
             state.push1(loaded);
         }
@@ -871,6 +1009,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 state,
                 prepare_addr(memarg, 8, builder, state, environ)?
             );
+			#[cfg(feature = "wa2x-test")]
+			let loaded = build_vector_load(builder, state, op, flags, base, 0);
+			#[cfg(not(feature = "wa2x-test"))]
             let loaded = builder.ins().uload8x8(flags, base, 0);
             state.push1(loaded);
         }
@@ -879,6 +1020,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 state,
                 prepare_addr(memarg, 8, builder, state, environ)?
             );
+			#[cfg(feature = "wa2x-test")]
+			let loaded = build_vector_load(builder, state, op, flags, base, 0);
+			#[cfg(not(feature = "wa2x-test"))]
             let loaded = builder.ins().sload16x4(flags, base, 0);
             state.push1(loaded);
         }
@@ -887,6 +1031,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 state,
                 prepare_addr(memarg, 8, builder, state, environ)?
             );
+			#[cfg(feature = "wa2x-test")]
+			let loaded = build_vector_load(builder, state, op, flags, base, 0);
+			#[cfg(not(feature = "wa2x-test"))]
             let loaded = builder.ins().uload16x4(flags, base, 0);
             state.push1(loaded);
         }
@@ -895,6 +1042,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 state,
                 prepare_addr(memarg, 8, builder, state, environ)?
             );
+			#[cfg(feature = "wa2x-test")]
+			let loaded = build_vector_load(builder, state, op, flags, base, 0);
+			#[cfg(not(feature = "wa2x-test"))]
             let loaded = builder.ins().sload32x2(flags, base, 0);
             state.push1(loaded);
         }
@@ -903,6 +1053,9 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 state,
                 prepare_addr(memarg, 8, builder, state, environ)?
             );
+			#[cfg(feature = "wa2x-test")]
+			let loaded = build_vector_load(builder, state, op, flags, base, 0);
+			#[cfg(not(feature = "wa2x-test"))]
             let loaded = builder.ins().uload32x2(flags, base, 0);
             state.push1(loaded);
         }
@@ -2431,9 +2584,22 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 
         Operator::BrOnNull { relative_depth } => {
             let r = state.pop1();
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
             let (br_destination, inputs) = translate_br_if_args(*relative_depth, state);
             let is_null = environ.translate_ref_is_null(builder.cursor(), r)?;
             let else_block = builder.create_block();
+			#[cfg(feature = "wa2x-test")]
+			canonicalise_brif_with_debug(
+				builder, 
+				state_debug, 
+				is_null, 
+				br_destination, 
+				inputs, 
+				else_block, 
+				&[],
+			);
+			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_brif(builder, is_null, br_destination, inputs, else_block, &[]);
 
             builder.seal_block(else_block); // The only predecessor is the current block.
@@ -2447,9 +2613,23 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             // Peek the value val from the stack.
             // If val is ref.null ht, then: pop the value val from the stack.
             // Else: Execute the instruction (br relative_depth).
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
             let is_null = environ.translate_ref_is_null(builder.cursor(), state.peek1())?;
             let (br_destination, inputs) = translate_br_if_args(*relative_depth, state);
             let else_block = builder.create_block();
+
+			#[cfg(feature = "wa2x-test")]
+			canonicalise_brif_with_debug(
+				builder, 
+				state_debug, 
+				is_null, 
+				else_block, 
+				&[], 
+				br_destination, 
+				inputs
+			);
+			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_brif(builder, is_null, else_block, &[], br_destination, inputs);
 
             // In the null case, pop the ref
@@ -2468,12 +2648,25 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let (sigref, num_args) = state.get_indirect_sig(builder.func, *type_index, environ)?;
             let callee = state.pop1();
 
+			#[cfg(feature = "wa2x-test")]
+			let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
+
             // Bitcast any vector arguments to their default type, I8X16, before calling.
             let args = state.peekn_mut(num_args);
             bitcast_wasm_params(environ, sigref, args, builder);
 
+			#[cfg(not(feature = "wa2x-test"))]
             let call =
                 environ.translate_call_ref(builder, sigref, callee, state.peekn(num_args))?;
+
+			#[cfg(feature = "wa2x-test")]
+			let call = environ.translate_call_ref_with_debug(
+				builder, 
+				state_debug, 
+				sigref, 
+				callee, 
+				state.peekn(num_args)
+			)?;
 
             let inst_results = builder.inst_results(call);
             debug_assert_eq!(
@@ -2826,6 +3019,8 @@ where
         Ok(offset) => bounds_checks::bounds_check_and_compute_addr(
             builder,
             environ,
+			#[cfg(feature = "wa2x-test")]
+			state,
             &heap,
             index,
             offset,
@@ -2867,6 +3062,8 @@ where
             bounds_checks::bounds_check_and_compute_addr(
                 builder,
                 environ,
+				#[cfg(feature = "wa2x-test")]
+				state,
                 &heap,
                 adjusted_index,
                 0,
@@ -2965,6 +3162,90 @@ pub enum Reachability<T> {
     Unreachable,
 }
 
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_Load<'a>(
+    builder: &'a mut FunctionBuilder,
+    state: &mut FuncTranslationState,
+    opcode: ir::Opcode,
+	ctrl_typevar: Type,
+	flags: ir::MemFlags,
+	offset: ir::immediates::Offset32,
+	arg0: Value,
+) -> (ir::Inst, &'a mut ir::DataFlowGraph) {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Load", source_location);
+	builder
+        .ins()
+        .Load(opcode, ctrl_typevar, flags, offset, arg0)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_load<'a, T1, T2>(
+    builder: &'a mut FunctionBuilder,
+    state: &mut FuncTranslationState,
+    mem: ir::Type,
+	mem_flags: T1,
+	p: ir::Value,
+	offset: T2,
+) -> ir::Value 
+where 
+	T1: Into<ir::MemFlags>,
+	T2: Into<ir::immediates::Offset32>
+{
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Load", source_location);
+	builder
+        .ins()
+        .load(mem, mem_flags, p, offset)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_vector_load<T1, T2>(
+    builder: &mut FunctionBuilder,
+    state: &mut FuncTranslationState,
+	op: &Operator,
+    mem_flags: T1,
+	p: Value,
+	offset: T2,
+) -> Value
+where 
+	T1: Into<MemFlags>,
+	T2: Into<ir::immediates::Offset32>
+{
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Load", source_location);
+	match op {
+		Operator::V128Load8x8S { .. } => builder
+			.ins()
+			.sload8x8(mem_flags, p, offset),
+
+		Operator::V128Load8x8U { .. } => builder
+			.ins()
+			.uload8x8(mem_flags, p, offset),
+
+		Operator::V128Load16x4S { .. } => builder
+			.ins()
+			.sload16x4(mem_flags, p, offset),
+
+		Operator::V128Load16x4U { .. } => builder
+			.ins()
+			.uload16x4(mem_flags, p, offset),
+
+		Operator::V128Load32x2S { .. } => builder
+			.ins()
+			.sload32x2(mem_flags, p, offset),
+
+		Operator::V128Load32x2U { .. } => builder
+			.ins()
+			.uload32x2(mem_flags, p, offset),
+		
+		_ => unreachable!()
+	}
+}
+
 /// Translate a load instruction.
 ///
 /// Returns the execution state's reachability after the load is translated.
@@ -2985,11 +3266,63 @@ fn translate_load<FE: FuncEnvironment + ?Sized>(
 
     environ.before_load(builder, mem_op_size, wasm_index, memarg.offset);
 
+	#[cfg(feature = "wa2x-test")]
+	let (load, dfg) = build_Load(
+		builder, 
+		state, 
+		opcode, 
+		result_ty, 
+		flags, 
+		Offset32::new(0), 
+		base
+	);
+
+	#[cfg(not(feature = "wa2x-test"))]
     let (load, dfg) = builder
         .ins()
         .Load(opcode, result_ty, flags, Offset32::new(0), base);
     state.push1(dfg.first_result(load));
     Ok(Reachability::Reachable(()))
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_store<T1, T2>(
+    builder: &mut FunctionBuilder,
+    state: &mut FuncTranslationState,
+    mem_flags: T1,
+	x: Value,
+	p: Value,
+	offset: T2,
+) -> ir::Inst 
+where 
+	T1: Into<ir::MemFlags>,
+	T2: Into<ir::immediates::Offset32>
+{
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Store", source_location);
+	builder
+        .ins()
+        .store(mem_flags, x, p, offset)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_Store<'a>(
+    builder: &'a mut FunctionBuilder,
+    state: &mut FuncTranslationState,
+    opcode: ir::Opcode,
+	ctrl_typevar: Type,
+	flags: ir::MemFlags,
+	offset: ir::immediates::Offset32,
+	arg0: Value,
+	arg1: Value,
+) -> (ir::Inst, &'a mut ir::DataFlowGraph) {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Store", source_location);
+	builder
+        .ins()
+        .Store(opcode, ctrl_typevar, flags, offset, arg0, arg1)
 }
 
 /// Translate a store instruction.
@@ -3011,6 +3344,19 @@ fn translate_store<FE: FuncEnvironment + ?Sized>(
 
     environ.before_store(builder, mem_op_size, wasm_index, memarg.offset);
 
+	#[cfg(feature = "wa2x-test")]
+	build_Store(
+		builder, 
+		state, 
+		opcode, 
+		val_ty, 
+		flags, 
+		Offset32::new(0), 
+		val, 
+		base
+	);
+
+	#[cfg(not(feature = "wa2x-test"))]
     builder
         .ins()
         .Store(opcode, val_ty, flags, Offset32::new(0), val, base);
@@ -3266,8 +3612,21 @@ fn translate_br_if(
     state: &mut FuncTranslationState,
 ) {
     let val = state.pop1();
+	#[cfg(feature = "wa2x-test")]
+	let state_debug: &mut FuncTranslationState = unsafe { std::mem::transmute(&mut *state) };
     let (br_destination, inputs) = translate_br_if_args(relative_depth, state);
     let next_block = builder.create_block();
+	#[cfg(feature = "wa2x-test")]
+	canonicalise_brif_with_debug(
+		builder, 
+		state_debug, 
+		val, 
+		br_destination, 
+		inputs, 
+		next_block, 
+		&[],
+	);
+	#[cfg(not(feature = "wa2x-test"))]
     canonicalise_brif(builder, val, br_destination, inputs, next_block, &[]);
 
     builder.seal_block(next_block); // The only predecessor is the current block.
@@ -3582,6 +3941,21 @@ fn canonicalise_then_jump(
     builder.ins().jump(destination, canonicalised)
 }
 
+/// Generate a `jump` instruction, but first cast all 128-bit vector values to I8X16 if they
+/// don't have that type.  This is done in somewhat roundabout way so as to ensure that we
+/// almost never have to do any heap allocation.
+#[cfg(feature = "wa2x-test")]
+fn canonicalise_then_jump_with_debug(
+    builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+    destination: ir::Block,
+    params: &[ir::Value],
+) -> ir::Inst {
+    let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "UncondBranch", source_location);
+	canonicalise_then_jump(builder, destination, params)
+}
+
 /// The same but for a `brif` instruction.
 fn canonicalise_brif(
     builder: &mut FunctionBuilder,
@@ -3604,6 +3978,63 @@ fn canonicalise_brif(
         block_else,
         canonicalised_else,
     )
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn translate_br_table_with_debug(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+	x: ir::Value,
+	jt: ir::JumpTable
+) -> ir::Inst {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Switch", source_location);
+	builder.ins().br_table(x, jt)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn translate_return_with_debug(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+	rvals: &[ir::Value]
+) -> ir::Inst {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Return", source_location);
+	builder.ins().return_(rvals)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_global_value(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+	mem: ir::Type,
+	gv: ir::GlobalValue
+) -> ir::Value {
+	if builder.is_load_global_value(gv) {
+		let source_location = std::panic::Location::caller();
+		state.add_debug_info(builder, "Load", source_location);
+	}
+	builder.ins().global_value(mem, gv)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+/// The same but for a `brif` instruction with wa2x debug info.
+fn canonicalise_brif_with_debug(
+    builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+    cond: ir::Value,
+    block_then: ir::Block,
+    params_then: &[ir::Value],
+    block_else: ir::Block,
+    params_else: &[ir::Value],
+) -> ir::Inst {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "CondBranch", source_location);
+    canonicalise_brif(builder, cond, block_then, params_then, block_else, params_else)
 }
 
 /// A helper for popping and bitcasting a single value; since SIMD values can lose their type by

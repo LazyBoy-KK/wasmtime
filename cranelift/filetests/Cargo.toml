@@ -36,3 +36,6 @@ serde = { workspace = true }
 serde_derive = { workspace = true }
 cranelift.workspace = true
 smallvec = { workspace = true }
+
+[features]
+wa2x-test = ["cranelift-jit/wa2x-test"]

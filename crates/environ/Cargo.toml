@@ -66,3 +66,4 @@ std = [
   'wasmparser/std',
   'indexmap/std',
 ]
+wa2x-test = []

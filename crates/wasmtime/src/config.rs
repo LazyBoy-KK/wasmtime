@@ -150,6 +150,8 @@ struct ConfigTunables {
     generate_address_map: Option<bool>,
     debug_adapter_modules: Option<bool>,
     relaxed_simd_deterministic: Option<bool>,
+	#[cfg(feature = "wa2x-test")]
+	wa2x_debug_info: Option<bool>,
 }
 
 /// User-provided configuration for the compiler.
@@ -430,6 +432,13 @@ impl Config {
         self.tunables.generate_native_debuginfo = Some(enable);
         self
     }
+
+	#[cfg(feature = "wa2x-test")]
+	/// generate wa2x debug info
+	pub fn wa2x_debug_info(&mut self, enable: bool) -> &mut Self {
+		self.tunables.wa2x_debug_info = Some(enable);
+		self
+	}
 
     /// Configures whether [`WasmBacktrace`] will be present in the context of
     /// errors returned from Wasmtime.
@@ -1778,6 +1787,7 @@ impl Config {
             )
         }
 
+		#[cfg(not(feature = "wa2x-test"))]
         set_fields! {
             static_memory_reservation
             static_memory_offset_guard_size
@@ -1795,6 +1805,25 @@ impl Config {
             relaxed_simd_deterministic
         }
 
+		#[cfg(feature = "wa2x-test")]
+		set_fields! {
+            static_memory_reservation
+            static_memory_offset_guard_size
+            dynamic_memory_offset_guard_size
+            dynamic_memory_growth_reserve
+            generate_native_debuginfo
+            parse_wasm_debuginfo
+            consume_fuel
+            epoch_interruption
+            static_memory_bound_is_maximum
+            guard_before_linear_memory
+            table_lazy_init
+            generate_address_map
+            debug_adapter_modules
+            relaxed_simd_deterministic
+			wa2x_debug_info
+        }
+
         // If we're going to compile with winch, we must use the winch calling convention.
         #[cfg(any(feature = "cranelift", feature = "winch"))]
         {
@@ -1804,6 +1833,16 @@ impl Config {
                 bail!("Winch requires the table-lazy-init configuration option");
             }
         }
+
+		#[cfg(feature = "wa2x-test")]
+		if tunables.generate_address_map && tunables.wa2x_debug_info {
+			bail!("Wa2x debug info can not be enabled with address map");
+		}
+
+		#[cfg(feature = "wa2x-test")]
+		if tunables.wa2x_debug_info && tunables.generate_native_debuginfo {
+			bail!("Wa2x debug info can not be enabled with native debug info");	
+		}
 
         if tunables.static_memory_offset_guard_size < tunables.dynamic_memory_offset_guard_size {
             bail!("static memory guard size cannot be smaller than dynamic memory guard size");

@@ -379,6 +379,9 @@ impl Metadata<'_> {
 
             // Just a debugging aid, doesn't affect functionality at all.
             debug_adapter_modules: _,
+
+			#[cfg(feature = "wa2x-test")]
+			wa2x_debug_info: _,
         } = self.tunables;
 
         Self::check_int(

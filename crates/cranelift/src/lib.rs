@@ -12,6 +12,8 @@ use cranelift_codegen::{
 };
 use cranelift_entity::PrimaryMap;
 use cranelift_wasm::{FuncIndex, WasmFuncType, WasmHeapTopType, WasmHeapType, WasmValType};
+#[cfg(feature = "wa2x-test")]
+use cranelift_wasm::FuncTranslationState;
 
 use target_lexicon::Architecture;
 use wasmtime_environ::{
@@ -62,12 +64,16 @@ fn blank_sig(isa: &dyn TargetIsa, call_conv: CallConv) -> ir::Signature {
 fn unbarriered_store_type_at_offset(
     isa: &dyn TargetIsa,
     pos: &mut FuncCursor,
+	#[cfg(feature = "wa2x-test")]
+	state: &mut Option<&mut FuncTranslationState>,
     ty: WasmValType,
     flags: ir::MemFlags,
     base: ir::Value,
     offset: i32,
     value: ir::Value,
 ) {
+	#[cfg(feature = "wa2x-test")]
+	use compiler::build_cursor_store;
     let ir_ty = value_type(isa, ty);
     if ir_ty.is_ref() {
         let value = pos
@@ -78,8 +84,22 @@ fn unbarriered_store_type_at_offset(
             8 => pos.ins().ireduce(ir::types::I32, value),
             _ => unreachable!(),
         };
-        pos.ins().store(flags, truncated, base, offset);
+		#[cfg(feature = "wa2x-test")]
+		if let Some(state) = state {
+			build_cursor_store(pos, state, flags, truncated, base, offset);
+		} else {
+			pos.ins().store(flags, truncated, base, offset);
+		}
+		#[cfg(not(feature = "wa2x-test"))]
+		pos.ins().store(flags, truncated, base, offset);
     } else {
+		#[cfg(feature = "wa2x-test")]
+		if let Some(state) = state {
+			build_cursor_store(pos, state, flags, value, base, offset);
+		} else {
+			pos.ins().store(flags, value, base, offset);
+		}
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins().store(flags, value, base, offset);
     }
 }
@@ -96,13 +116,25 @@ fn unbarriered_store_type_at_offset(
 fn unbarriered_load_type_at_offset(
     isa: &dyn TargetIsa,
     pos: &mut FuncCursor,
+	#[cfg(feature = "wa2x-test")]
+	state: &mut Option<&mut FuncTranslationState>,
     ty: WasmValType,
     flags: ir::MemFlags,
     base: ir::Value,
     offset: i32,
 ) -> ir::Value {
+	#[cfg(feature = "wa2x-test")]
+	use crate::compiler::build_cursor_load;
+
     let ir_ty = value_type(isa, ty);
     if ir_ty.is_ref() {
+		#[cfg(feature = "wa2x-test")]
+		let gc_ref = if let Some(state) = state {
+			build_cursor_load(pos, state, ir::types::I32, flags, base, offset)
+		} else {
+			pos.ins().load(ir::types::I32, flags, base, offset)
+		};
+		#[cfg(not(feature = "wa2x-test"))]
         let gc_ref = pos.ins().load(ir::types::I32, flags, base, offset);
         let extended = match isa.pointer_bytes() {
             4 => gc_ref,
@@ -111,7 +143,16 @@ fn unbarriered_load_type_at_offset(
         };
         pos.ins().bitcast(ir_ty, ir::MemFlags::new(), extended)
     } else {
-        pos.ins().load(ir_ty, flags, base, offset)
+		#[cfg(feature = "wa2x-test")]
+		if let Some(state) = state {
+			build_cursor_load(pos, state, ir_ty, flags, base, offset)
+		} else {
+			pos.ins().load(ir_ty, flags, base, offset)
+		}
+		#[cfg(not(feature = "wa2x-test"))]
+		{
+			pos.ins().load(ir_ty, flags, base, offset)
+		}
     }
 }
 

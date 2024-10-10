@@ -1122,6 +1122,21 @@ impl MachInst for Inst {
         panic!("TODO FILL ME OUT")
     }
 
+	#[cfg(feature = "wa2x-test")]
+	fn is_load(&self) -> bool {
+		todo!()
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_store(&self) -> bool {
+		todo!()
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_trapif(&self) -> bool {
+		todo!()
+	}
+
     fn is_safepoint(&self) -> bool {
         match self {
             Inst::Call { .. } | Inst::CallInd { .. } => true,

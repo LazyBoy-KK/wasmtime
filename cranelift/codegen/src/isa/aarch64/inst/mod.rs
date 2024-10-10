@@ -1078,6 +1078,21 @@ impl MachInst for Inst {
         }
     }
 
+	#[cfg(feature = "wa2x-test")]
+	fn is_load(&self) -> bool {
+		todo!()
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_store(&self) -> bool {
+		todo!()
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_trapif(&self) -> bool {
+		todo!()
+	}
+
     fn gen_move(to_reg: Writable<Reg>, from_reg: Reg, ty: Type) -> Inst {
         let bits = ty.bits();
 

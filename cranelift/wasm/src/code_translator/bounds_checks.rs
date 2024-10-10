@@ -21,6 +21,8 @@
 
 use super::Reachability;
 use crate::{FuncEnvironment, HeapData, HeapStyle};
+#[cfg(feature = "wa2x-test")]
+use crate::FuncTranslationState;
 use cranelift_codegen::{
     cursor::{Cursor, FuncCursor},
     ir::{self, condcodes::IntCC, InstBuilder, RelSourceLoc},
@@ -38,6 +40,8 @@ use Reachability::*;
 pub fn bounds_check_and_compute_addr<Env>(
     builder: &mut FunctionBuilder,
     env: &mut Env,
+	#[cfg(feature = "wa2x-test")]
+	state: &mut FuncTranslationState,
     heap: &HeapData,
     // Dynamic operand indexing into the heap.
     index: ir::Value,
@@ -144,7 +148,13 @@ where
         //            index + 1 > bound
         //        ==> index >= bound
         HeapStyle::Dynamic { bound_gv } if offset_and_size == 1 => {
-            let bound = get_dynamic_heap_bound(builder, env, heap);
+            let bound = get_dynamic_heap_bound(
+				builder, 
+				#[cfg(feature = "wa2x-test")]
+				state,
+				env, 
+				heap
+			);
             let oob = make_compare(
                 builder,
                 IntCC::UnsignedGreaterThanOrEqual,
@@ -155,6 +165,8 @@ where
             );
             Reachable(explicit_check_oob_condition_and_compute_addr(
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				state,
                 heap,
                 env.pointer_type(),
                 index,
@@ -194,7 +206,13 @@ where
         HeapStyle::Dynamic { bound_gv }
             if can_use_virtual_memory && offset_and_size <= heap.offset_guard_size =>
         {
-            let bound = get_dynamic_heap_bound(builder, env, heap);
+            let bound = get_dynamic_heap_bound(
+				builder, 
+				#[cfg(feature = "wa2x-test")]
+				state,
+				env, 
+				heap
+			);
             let oob = make_compare(
                 builder,
                 IntCC::UnsignedGreaterThan,
@@ -205,6 +223,8 @@ where
             );
             Reachable(explicit_check_oob_condition_and_compute_addr(
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				state,
                 heap,
                 env.pointer_type(),
                 index,
@@ -224,7 +244,13 @@ where
         //            index + offset + access_size > bound
         //        ==> index > bound - (offset + access_size)
         HeapStyle::Dynamic { bound_gv } if offset_and_size <= heap.min_size.into() => {
-            let bound = get_dynamic_heap_bound(builder, env, heap);
+            let bound = get_dynamic_heap_bound(
+				builder, 
+				#[cfg(feature = "wa2x-test")]
+				state,
+				env, 
+				heap
+			);
             let adjustment = offset_and_size as i64;
             let adjustment_value = builder.ins().iconst(env.pointer_type(), adjustment);
             if pcc {
@@ -249,6 +275,8 @@ where
             );
             Reachable(explicit_check_oob_condition_and_compute_addr(
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				state,
                 heap,
                 env.pointer_type(),
                 index,
@@ -287,7 +315,13 @@ where
                     i64::try_from(offset_and_size).unwrap(),
                 ));
             }
-            let bound = get_dynamic_heap_bound(builder, env, heap);
+            let bound = get_dynamic_heap_bound(
+				builder, 
+				#[cfg(feature = "wa2x-test")]
+				state,
+				env, 
+				heap
+			);
             let oob = make_compare(
                 builder,
                 IntCC::UnsignedGreaterThan,
@@ -298,6 +332,8 @@ where
             );
             Reachable(explicit_check_oob_condition_and_compute_addr(
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				state,
                 heap,
                 env.pointer_type(),
                 index,
@@ -377,6 +413,8 @@ where
             );
             Reachable(compute_addr(
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				state,
                 heap,
                 env.pointer_type(),
                 index,
@@ -424,6 +462,8 @@ where
             );
             Reachable(explicit_check_oob_condition_and_compute_addr(
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				state,
                 heap,
                 env.pointer_type(),
                 index,
@@ -440,6 +480,8 @@ where
 /// Get the bound of a dynamic heap as an `ir::Value`.
 fn get_dynamic_heap_bound<Env>(
     builder: &mut FunctionBuilder,
+	#[cfg(feature = "wa2x-test")]
+	state: &mut FuncTranslationState,
     env: &mut Env,
     heap: &HeapData,
 ) -> ir::Value
@@ -468,6 +510,9 @@ where
 
         // Load the heap bound from its global variable.
         (_, HeapStyle::Dynamic { bound_gv }) => (
+			#[cfg(feature = "wa2x-test")]
+			build_global_value(builder, state, env.pointer_type(), *bound_gv),
+			#[cfg(not(feature = "wa2x-test"))]
             builder.ins().global_value(env.pointer_type(), *bound_gv),
             *bound_gv,
         ),
@@ -552,6 +597,8 @@ impl AddrPcc {
 /// that inherently also implement bounds checking.
 fn explicit_check_oob_condition_and_compute_addr(
     pos: &mut FuncCursor,
+	#[cfg(feature = "wa2x-test")]
+	state: &mut FuncTranslationState, 
     heap: &HeapData,
     addr_ty: ir::Type,
     index: ir::Value,
@@ -567,11 +614,23 @@ fn explicit_check_oob_condition_and_compute_addr(
     oob_condition: ir::Value,
 ) -> ir::Value {
     if !spectre_mitigations_enabled {
+		#[cfg(feature = "wa2x-test")]
+		build_trapnz(pos, state, oob_condition, ir::TrapCode::HeapOutOfBounds);
+		#[cfg(not(feature = "wa2x-test"))]
         pos.ins()
             .trapnz(oob_condition, ir::TrapCode::HeapOutOfBounds);
     }
 
-    let mut addr = compute_addr(pos, heap, addr_ty, index, offset, pcc);
+    let mut addr = compute_addr(
+		pos, 
+		#[cfg(feature = "wa2x-test")]
+		state,
+		heap, 
+		addr_ty, 
+		index, 
+		offset, 
+		pcc
+	);
 
     if spectre_mitigations_enabled {
         let null = pos.ins().iconst(addr_ty, 0);
@@ -620,6 +679,8 @@ fn explicit_check_oob_condition_and_compute_addr(
 /// unless they succeed.
 fn compute_addr(
     pos: &mut FuncCursor,
+	#[cfg(feature = "wa2x-test")]
+	state: &mut FuncTranslationState,
     heap: &HeapData,
     addr_ty: ir::Type,
     index: ir::Value,
@@ -628,6 +689,9 @@ fn compute_addr(
 ) -> ir::Value {
     debug_assert_eq!(pos.func.dfg.value_type(index), addr_ty);
 
+	#[cfg(feature = "wa2x-test")]
+	let heap_base = build_cursor_global_value(pos, state, addr_ty, heap.base);
+	#[cfg(not(feature = "wa2x-test"))]
     let heap_base = pos.ins().global_value(addr_ty, heap.base);
 
     match pcc {
@@ -728,4 +792,47 @@ fn compute_addr(
 fn offset_plus_size(offset: u32, size: u8) -> u64 {
     // Cannot overflow because we are widening to `u64`.
     offset as u64 + size as u64
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_trapnz<T1: Into<ir::TrapCode>>(
+	pos: &mut FuncCursor,
+	state: &mut FuncTranslationState,
+	c: ir::Value,
+	code: T1
+) -> ir::Inst {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info_cursor(pos, "CondBranch", source_location);
+	pos.ins().trapnz(c, code)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_global_value(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+	mem: ir::Type,
+	gv: ir::GlobalValue,
+) -> ir::Value {
+	if builder.is_load_global_value(gv) {
+		let source_location = std::panic::Location::caller();
+		state.add_debug_info(builder, "Load", source_location);
+	}
+	builder.ins().global_value(mem, gv)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_cursor_global_value(
+	pos: &mut FuncCursor,
+	state: &mut FuncTranslationState,
+	mem: ir::Type,
+	gv: ir::GlobalValue,
+) -> ir::Value {
+	if pos.is_load_global_value(gv) {
+		let source_location = std::panic::Location::caller();
+		state.add_debug_info_cursor(pos, "Load", source_location);
+	}
+	pos.ins().global_value(mem, gv)
 }

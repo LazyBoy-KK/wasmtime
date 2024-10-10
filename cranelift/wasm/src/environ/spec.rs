@@ -184,6 +184,41 @@ pub trait FuncEnvironment: TargetEnvironment {
         Ok(builder.ins().call(callee, call_args))
     }
 
+	#[cfg(feature = "wa2x-test")]
+	/// Translate a `call` WebAssembly instruction with wa2x debug info
+	fn translate_call_with_debug(
+		&mut self,
+        builder: &mut FunctionBuilder,
+		state: &mut FuncTranslationState,
+        callee_index: FuncIndex,
+        callee: ir::FuncRef,
+        call_args: &[ir::Value],
+	) -> WasmResult<ir::Inst>;
+
+	#[cfg(feature = "wa2x-test")]
+	/// Translate a `call_indirect` WebAssembly instruction with wa2x debug info
+	fn translate_call_indirect_with_debug(
+		&mut self,
+		builder: &mut FunctionBuilder,
+		state: &mut FuncTranslationState,
+        table_index: TableIndex,
+        ty_index: TypeIndex,
+        sig_ref: ir::SigRef,
+        callee: ir::Value,
+        call_args: &[ir::Value],
+	) -> WasmResult<Option<ir::Inst>>;
+
+	#[cfg(feature = "wa2x-test")]
+	/// Translate a `call_ref` WebAssembly instruction with wa2x debug info
+	fn translate_call_ref_with_debug(
+		&mut self,
+		builder: &mut FunctionBuilder,
+		state: &mut FuncTranslationState,
+        sig_ref: ir::SigRef,
+        callee: ir::Value,
+        call_args: &[ir::Value],
+    ) -> WasmResult<ir::Inst>;
+
     /// Translate a `call_indirect` WebAssembly instruction at `pos`.
     ///
     /// Insert instructions at `pos` for an indirect call to the function `callee` in the table

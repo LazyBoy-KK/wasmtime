@@ -781,6 +781,31 @@ impl MachInst for Inst {
         panic!("TODO FILL ME OUT")
     }
 
+	#[cfg(feature = "wa2x-test")]
+	fn is_load(&self) -> bool {
+		match self {
+			&Self::AtomicLoad { .. } | &Self::Load { .. } | &Self::LoadAddr { .. } |
+			&Self::VecLoad { .. } => true,
+			_ => false
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_store(&self) -> bool {
+		match self {
+			&Self::Store { .. } | &Self::AtomicStore { .. } | &Self::VecStore { .. } => true,
+			_ => false,
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_trapif(&self) -> bool {
+		match &self {
+			Self::TrapIf { .. } => true,
+			_ => false,
+		}
+	}
+
     fn gen_move(to_reg: Writable<Reg>, from_reg: Reg, ty: Type) -> Inst {
         let x = Inst::Mov {
             rd: to_reg,

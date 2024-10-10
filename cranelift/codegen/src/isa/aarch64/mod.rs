@@ -1,5 +1,7 @@
 //! ARM 64-bit Instruction Set Architecture.
 
+#[cfg(feature = "wa2x-test")]
+use crate::debug_ctx::DebugCtx;
 use crate::dominator_tree::DominatorTree;
 use crate::ir::{Function, Type};
 use crate::isa::aarch64::settings as aarch64_settings;
@@ -69,10 +71,19 @@ impl TargetIsa for AArch64Backend {
         domtree: &DominatorTree,
         want_disasm: bool,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> CodegenResult<CompiledCodeStencil> {
         let (vcode, regalloc_result) = self.compile_vcode(func, domtree, ctrl_plane)?;
 
-        let emit_result = vcode.emit(&regalloc_result, want_disasm, &self.flags, ctrl_plane);
+        let emit_result = vcode.emit(
+			&regalloc_result, 
+			want_disasm, 
+			&self.flags, 
+			ctrl_plane,
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx,
+		);
         let frame_size = emit_result.frame_size;
         let value_labels_ranges = emit_result.value_labels_ranges;
         let buffer = emit_result.buffer;

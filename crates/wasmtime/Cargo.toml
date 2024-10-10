@@ -128,7 +128,7 @@ default = [
   'std',
 ]
 
-wa2x-test = []
+wa2x-test = ["wasmtime-environ/wa2x-test", "wasmtime-cranelift?/wa2x-test", "wasmtime-winch?/wa2x-test"]
 
 # An on-by-default feature enabling runtime compilation of WebAssembly modules
 # with the Cranelift compiler. Cranelift is the default compilation backend of

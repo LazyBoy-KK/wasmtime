@@ -131,6 +131,8 @@ impl<'a> TrampolineCompiler<'a> {
                 let (ptr, len) = self.compiler.allocate_stack_array_and_spill_args(
                     wasm_func_ty,
                     &mut self.builder,
+					#[cfg(feature = "wa2x-test")]
+					None,
                     &args[2..],
                 );
                 let len = self.builder.ins().iconst(pointer_type, i64::from(len));
@@ -250,6 +252,8 @@ impl<'a> TrampolineCompiler<'a> {
                 let results = self.compiler.load_values_from_array(
                     wasm_func_ty.returns(),
                     &mut self.builder,
+					#[cfg(feature = "wa2x-test")]
+					None,
                     values_vec_ptr,
                     values_vec_len,
                 );
@@ -583,6 +587,8 @@ impl<'a> TrampolineCompiler<'a> {
                 let results = self.compiler.load_values_from_array(
                     self.types[self.signature].unwrap_func().params(),
                     &mut self.builder,
+					#[cfg(feature = "wa2x-test")]
+					None,
                     block0_params[2],
                     block0_params[3],
                 );
@@ -608,6 +614,8 @@ impl<'a> TrampolineCompiler<'a> {
                 let (ptr, len) = (block0_params[2], block0_params[3]);
                 self.compiler.store_values_to_array(
                     &mut self.builder,
+					#[cfg(feature = "wa2x-test")]
+					None,
                     self.types[self.signature].unwrap_func().returns(),
                     results,
                     ptr,
@@ -668,7 +676,7 @@ impl ComponentCompiler for Compiler {
             c.translate(&component.trampolines[index]);
             c.builder.finalize();
 
-            Ok(Box::new(compiler.finish()?))
+            Ok(Box::new(compiler.finish(&self.tunables)?))
         };
         Ok(AllCallFunc {
             wasm_call: compile(Abi::Wasm)?,

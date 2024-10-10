@@ -702,7 +702,7 @@ impl Module for JITModule {
         }
 
         // work around borrow-checker to allow reuse of ctx below
-        let res = ctx.compile(self.isa(), ctrl_plane)?;
+        let res = ctx.compile(self.isa(), ctrl_plane, #[cfg(feature = "wa2x-test")]None)?;
         let alignment = res.buffer.alignment as u64;
         let compiled_code = ctx.compiled_code().unwrap();
 

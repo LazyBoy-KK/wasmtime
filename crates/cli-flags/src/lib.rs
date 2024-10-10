@@ -152,6 +152,7 @@ wasmtime_option_group! {
     }
 }
 
+#[cfg(not(feature = "wa2x-test"))]
 wasmtime_option_group! {
     #[derive(PartialEq, Clone)]
     pub struct DebugOptions {
@@ -165,6 +166,29 @@ wasmtime_option_group! {
         pub log_to_files: Option<bool>,
         /// Enable coredump generation to this file after a WebAssembly trap.
         pub coredump: Option<String>,
+    }
+
+    enum Debug {
+        ...
+    }
+}
+
+#[cfg(feature = "wa2x-test")]
+wasmtime_option_group! {
+    #[derive(PartialEq, Clone)]
+    pub struct DebugOptions {
+        /// Enable generation of DWARF debug information in compiled code.
+        pub debug_info: Option<bool>,
+        /// Configure whether compiled code can map native addresses to wasm.
+        pub address_map: Option<bool>,
+        /// Configure whether logging is enabled.
+        pub logging: Option<bool>,
+        /// Configure whether logs are emitted to files
+        pub log_to_files: Option<bool>,
+        /// Enable coredump generation to this file after a WebAssembly trap.
+        pub coredump: Option<String>,
+		/// Enable wa2x debug info
+		pub wa2x_debug_info: Option<bool>,
     }
 
     enum Debug {
@@ -585,6 +609,16 @@ impl CommonOptions {
         if let Some(enable) = self.opts.memory_init_cow {
             config.memory_init_cow(enable);
         }
+
+		#[cfg(feature = "wa2x-test")]
+		if let Some(enable) = self.debug.wa2x_debug_info {
+			if let Some(parallel_compilation) = self.codegen.parallel_compilation {
+				if enable && parallel_compilation {
+					anyhow::bail!("wa2x debug info cannot be enabled with parallel compilation");
+				}
+			}
+			config.wa2x_debug_info(enable);
+		}
 
         match_feature! {
             ["pooling-allocator" : self.opts.pooling_allocator.or(pooling_allocator_default)]

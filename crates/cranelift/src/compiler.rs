@@ -9,11 +9,15 @@ use cranelift_codegen::isa::{
     unwind::{UnwindInfo, UnwindInfoKind},
     OwnedTargetIsa, TargetIsa,
 };
+#[cfg(feature = "wa2x-test")]
+use cranelift_codegen::{cursor::FuncCursor, debug_ctx::DebugCtx};
 use cranelift_codegen::print_errors::pretty_error;
 use cranelift_codegen::Context;
 use cranelift_codegen::{CompiledCode, MachStackMap};
 use cranelift_entity::PrimaryMap;
 use cranelift_frontend::FunctionBuilder;
+#[cfg(feature = "wa2x-test")]
+use cranelift_wasm::FuncTranslationState;
 use cranelift_wasm::{DefinedFuncIndex, FuncTranslator, WasmFuncType, WasmValType};
 use object::write::{Object, StandardSegment, SymbolId};
 use object::{RelocationEncoding, RelocationFlags, RelocationKind, SectionKind};
@@ -127,6 +131,8 @@ impl wasmtime_environ::Compiler for Compiler {
         func_index: DefinedFuncIndex,
         input: FunctionBodyData<'_>,
         types: &ModuleTypesBuilder,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<(WasmFunctionInfo, Box<dyn Any + Send>), CompileError> {
         let isa = &*self.isa;
         let module = &translation.module;
@@ -147,8 +153,27 @@ impl wasmtime_environ::Compiler for Compiler {
             context.func.collect_debug_info();
         }
 
+		#[cfg(feature = "wa2x-test")]
+		if self.tunables.wa2x_debug_info {
+			let state = compiler.cx.func_translator.state();
+			if state.debug_ctx.is_none() {
+				state.debug_ctx = Some(DebugCtx::default());
+			}
+		}
+
+		#[cfg(not(feature = "wa2x-test"))]
         let mut func_env =
             FuncEnvironment::new(isa, translation, types, &self.tunables, self.wmemcheck);
+		
+		#[cfg(feature = "wa2x-test")]
+		let mut func_env = FuncEnvironment::new_with_debug(
+			isa, 
+			translation, 
+			types, 
+			&self.tunables, 
+			unsafe { std::mem::transmute(compiler.cx.func_translator.state()) },
+			self.wmemcheck
+		);
 
         // The `stack_limit` global value below is the implementation of stack
         // overflow checks in Wasmtime.
@@ -208,6 +233,8 @@ impl wasmtime_environ::Compiler for Compiler {
             body.clone(),
             &mut context.func,
             &mut func_env,
+			#[cfg(feature = "wa2x-test")]
+			symbol,
         )?;
 
         if let Some(path) = &self.clif_dir {
@@ -221,7 +248,9 @@ impl wasmtime_environ::Compiler for Compiler {
             write!(output, "{}", context.func.display()).unwrap();
         }
 
-        let (info, func) = compiler.finish_with_info(Some((&body, &self.tunables)))?;
+		// #[cfg(feature = "wa2x-test")]
+		// eprintln!("symbol:{symbol}");
+		let (info, func) = compiler.finish_with_info(Some(&body), &self.tunables)?;
 
         let timing = cranelift_codegen::timing::take_current();
         log::debug!("{:?} translated in {:?}", func_index, timing.total());
@@ -230,11 +259,32 @@ impl wasmtime_environ::Compiler for Compiler {
         Ok((info, Box::new(func)))
     }
 
+	#[cfg(feature = "wa2x-test")]
+	fn output_wa2x_debug_info(&self) -> Result<()> {
+    	use std::io::Write;
+
+		let contexts = self.contexts.lock().unwrap();
+		let saved_context = contexts.last();
+		if let Some(cx) = saved_context {
+			if let Some(ctx) = cx.func_translator.state_ref().debug_ctx.as_ref() {
+				let mut output = std::fs::OpenOptions::new()
+					.write(true)
+					.truncate(true)
+					.create(true)
+					.open("./wa2x_debug_info.debug")?;
+				output.write(ctx.get_debug_info().as_bytes())?;
+			}
+		}
+		Ok(())
+	}
+
     fn compile_array_to_wasm_trampoline(
         &self,
         translation: &ModuleTranslation<'_>,
         types: &ModuleTypesBuilder,
         def_func_index: DefinedFuncIndex,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
         let func_index = translation.module.func_index(def_func_index);
         let sig = translation.module.functions[func_index].signature;
@@ -247,7 +297,19 @@ impl wasmtime_environ::Compiler for Compiler {
 
         let mut compiler = self.function_compiler();
         let func = ir::Function::with_name_signature(Default::default(), array_call_sig);
+		#[cfg(feature = "wa2x-test")]
+		let state: &mut FuncTranslationState = {
+			if self.tunables.wa2x_debug_info {
+				let state = compiler.cx.func_translator.state();
+				if state.debug_ctx.is_none() {
+					state.debug_ctx = Some(DebugCtx::default());
+				}
+			}
+			unsafe { std::mem::transmute(compiler.cx.func_translator.state()) }
+		};
         let (mut builder, block0) = compiler.builder(func);
+		#[cfg(feature = "wa2x-test")]
+		state.add_func_debug_info(&mut builder, symbol);
 
         let (vmctx, caller_vmctx, values_vec_ptr, values_vec_len) = {
             let params = builder.func.dfg.block_params(block0);
@@ -258,6 +320,8 @@ impl wasmtime_environ::Compiler for Compiler {
         let mut args = self.load_values_from_array(
             wasm_func_ty.params(),
             &mut builder,
+			#[cfg(feature = "wa2x-test")]
+			Some(state),
             values_vec_ptr,
             values_vec_len,
         );
@@ -271,6 +335,16 @@ impl wasmtime_environ::Compiler for Compiler {
         debug_assert_vmctx_kind(isa, &mut builder, vmctx, wasmtime_environ::VMCONTEXT_MAGIC);
         let offsets = VMOffsets::new(isa.pointer_bytes(), &translation.module);
         let vm_runtime_limits_offset = offsets.ptr.vmctx_runtime_limits();
+		#[cfg(feature = "wa2x-test")]
+		save_last_wasm_entry_sp_with_debug(
+            &mut builder,
+			state,
+            pointer_type,
+            &offsets.ptr,
+            vm_runtime_limits_offset.into(),
+            vmctx,
+        );
+		#[cfg(not(feature = "wa2x-test"))]
         save_last_wasm_entry_sp(
             &mut builder,
             pointer_type,
@@ -280,27 +354,39 @@ impl wasmtime_environ::Compiler for Compiler {
         );
 
         // Then call the Wasm function with those arguments.
+		#[cfg(not(feature = "wa2x-test"))]
         let call = declare_and_call(&mut builder, wasm_call_sig, func_index.as_u32(), &args);
+		#[cfg(feature = "wa2x-test")]
+		let call = declare_and_call_with_debug(&mut builder, state, wasm_call_sig, func_index.as_u32(), &args);
         let results = builder.func.dfg.inst_results(call).to_vec();
 
         // Then store the results back into the array.
         self.store_values_to_array(
             &mut builder,
+			#[cfg(feature = "wa2x-test")]
+			Some(state),
             wasm_func_ty.returns(),
             &results,
             values_vec_ptr,
             values_vec_len,
         );
 
+		#[cfg(feature = "wa2x-test")]
+		build_return(&mut builder, state, &[]);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().return_(&[]);
         builder.finalize();
 
-        Ok(Box::new(compiler.finish()?))
+		// #[cfg(feature = "wa2x-test")]
+		// eprintln!("symbol:{symbol}");
+		Ok(Box::new(compiler.finish(&self.tunables)?))
     }
 
     fn compile_wasm_to_array_trampoline(
         &self,
         wasm_func_ty: &WasmFuncType,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
         let isa = &*self.isa;
         let pointer_type = isa.pointer_type();
@@ -309,7 +395,19 @@ impl wasmtime_environ::Compiler for Compiler {
 
         let mut compiler = self.function_compiler();
         let func = ir::Function::with_name_signature(Default::default(), wasm_call_sig);
+		#[cfg(feature = "wa2x-test")]
+		let state: &mut FuncTranslationState = {
+			if self.tunables.wa2x_debug_info {
+				let state = compiler.cx.func_translator.state();
+				if state.debug_ctx.is_none() {
+					state.debug_ctx = Some(DebugCtx::default());
+				}
+			}
+			unsafe { std::mem::transmute(compiler.cx.func_translator.state()) }
+		};
         let (mut builder, block0) = compiler.builder(func);
+		#[cfg(feature = "wa2x-test")]
+		state.add_func_debug_info(&mut builder, symbol);
 
         let args = builder.func.dfg.block_params(block0).to_vec();
         let callee_vmctx = args[0];
@@ -326,22 +424,51 @@ impl wasmtime_environ::Compiler for Compiler {
             wasmtime_environ::VMCONTEXT_MAGIC,
         );
         let ptr = isa.pointer_bytes();
+		#[cfg(feature = "wa2x-test")]
+		let limits = build_load(
+			&mut builder, 
+			state, 
+			pointer_type,
+            MemFlags::trusted(),
+            caller_vmctx,
+            i32::try_from(ptr.vmcontext_runtime_limits()).unwrap(),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let limits = builder.ins().load(
             pointer_type,
             MemFlags::trusted(),
             caller_vmctx,
             i32::try_from(ptr.vmcontext_runtime_limits()).unwrap(),
         );
+		#[cfg(feature = "wa2x-test")]
+		save_last_wasm_exit_fp_and_pc_with_debug(&mut builder, state, pointer_type, &ptr, limits);
+		#[cfg(not(feature = "wa2x-test"))]
         save_last_wasm_exit_fp_and_pc(&mut builder, pointer_type, &ptr, limits);
 
         // Spill all wasm arguments to the stack in `ValRaw` slots.
         let (args_base, args_len) =
-            self.allocate_stack_array_and_spill_args(wasm_func_ty, &mut builder, &args[2..]);
+            self.allocate_stack_array_and_spill_args(
+				wasm_func_ty, 
+				&mut builder, 
+				#[cfg(feature = "wa2x-test")]
+				Some(state), 
+				&args[2..]
+			);
         let args_len = builder.ins().iconst(pointer_type, i64::from(args_len));
 
         // Load the actual callee out of the
         // `VMArrayCallHostFuncContext::host_func`.
         let ptr_size = isa.pointer_bytes();
+		#[cfg(feature = "wa2x-test")]
+		let callee = build_load(
+			&mut builder, 
+			state, 
+			pointer_type,
+            MemFlags::trusted(),
+            callee_vmctx,
+            ptr_size.vmarray_call_host_func_context_func_ref() + ptr_size.vm_func_ref_array_call(),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let callee = builder.ins().load(
             pointer_type,
             MemFlags::trusted(),
@@ -351,18 +478,39 @@ impl wasmtime_environ::Compiler for Compiler {
 
         // Do an indirect call to the callee.
         let callee_signature = builder.func.import_signature(array_call_sig);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().call_indirect(
             callee_signature,
             callee,
             &[callee_vmctx, caller_vmctx, args_base, args_len],
         );
+		#[cfg(feature = "wa2x-test")]
+		build_call_indirect(
+			&mut builder, 
+			state, 
+			callee_signature, 
+			callee, 
+			&[callee_vmctx, caller_vmctx, args_base, args_len],
+		);
 
         let results =
-            self.load_values_from_array(wasm_func_ty.returns(), &mut builder, args_base, args_len);
+            self.load_values_from_array(
+				wasm_func_ty.returns(), 
+				&mut builder, 
+				#[cfg(feature = "wa2x-test")]
+				Some(state),
+				args_base, 
+				args_len
+			);
+		#[cfg(feature = "wa2x-test")]
+		build_return(&mut builder, state, &results);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().return_(&results);
         builder.finalize();
 
-        Ok(Box::new(compiler.finish()?))
+		// #[cfg(feature = "wa2x-test")]
+		// eprintln!("symbol:{symbol}");
+		Ok(Box::new(compiler.finish(&self.tunables)?))
     }
 
     fn append_code(
@@ -383,6 +531,12 @@ impl wasmtime_environ::Compiler for Compiler {
         for (i, (sym, func)) in funcs.iter().enumerate() {
             let func = func.downcast_ref::<CompiledFunction>().unwrap();
             let (sym, range) = builder.append_func(&sym, func, |idx| resolve_reloc(i, idx));
+			#[cfg(feature = "wa2x-test")]
+			if self.tunables.generate_address_map || self.tunables.wa2x_debug_info {
+				let addr = func.address_map();
+                addrs.push(range.clone(), &addr.instructions);
+			}
+			#[cfg(not(feature = "wa2x-test"))]
             if self.tunables.generate_address_map {
                 let addr = func.address_map();
                 addrs.push(range.clone(), &addr.instructions);
@@ -398,6 +552,11 @@ impl wasmtime_environ::Compiler for Compiler {
 
         builder.finish();
 
+		#[cfg(feature = "wa2x-test")]
+		if self.tunables.generate_address_map || self.tunables.wa2x_debug_info {
+			addrs.append_to(obj);
+		}
+		#[cfg(not(feature = "wa2x-test"))]
         if self.tunables.generate_address_map {
             addrs.append_to(obj);
         }
@@ -503,6 +662,8 @@ impl wasmtime_environ::Compiler for Compiler {
     fn compile_wasm_to_builtin(
         &self,
         index: BuiltinFunctionIndex,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
         let isa = &*self.isa;
         let ptr_size = isa.pointer_bytes();
@@ -511,19 +672,44 @@ impl wasmtime_environ::Compiler for Compiler {
 
         let mut compiler = self.function_compiler();
         let func = ir::Function::with_name_signature(Default::default(), sig.clone());
+		#[cfg(feature = "wa2x-test")]
+		let state: &mut FuncTranslationState = {
+			if self.tunables.wa2x_debug_info {
+				let state = compiler.cx.func_translator.state();
+				if state.debug_ctx.is_none() {
+					state.debug_ctx = Some(DebugCtx::default());
+				}
+			}
+			unsafe { std::mem::transmute(compiler.cx.func_translator.state()) }
+		};
         let (mut builder, block0) = compiler.builder(func);
+		#[cfg(feature = "wa2x-test")]
+		state.add_func_debug_info(&mut builder, symbol);
         let vmctx = builder.block_params(block0)[0];
 
         // Debug-assert that this is the right kind of vmctx, and then
         // additionally perform the "routine of the exit trampoline" of saving
         // fp/pc/etc.
         debug_assert_vmctx_kind(isa, &mut builder, vmctx, wasmtime_environ::VMCONTEXT_MAGIC);
+		#[cfg(feature = "wa2x-test")]
+		let limits = build_load(
+			&mut builder, 
+			state, 
+			pointer_type,
+            MemFlags::trusted(),
+            vmctx,
+            ptr_size.vmcontext_runtime_limits(),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let limits = builder.ins().load(
             pointer_type,
             MemFlags::trusted(),
             vmctx,
             ptr_size.vmcontext_runtime_limits(),
         );
+		#[cfg(feature = "wa2x-test")]
+		save_last_wasm_exit_fp_and_pc_with_debug(&mut builder, state, pointer_type, &ptr_size, limits);
+		#[cfg(not(feature = "wa2x-test"))]
         save_last_wasm_exit_fp_and_pc(&mut builder, pointer_type, &ptr_size, limits);
 
         // Now it's time to delegate to the actual builtin. Builtins are stored
@@ -531,6 +717,16 @@ impl wasmtime_environ::Compiler for Compiler {
         // array and then load the entry of the array that corresponds to this
         // builtin.
         let mem_flags = ir::MemFlags::trusted().with_readonly();
+		#[cfg(feature = "wa2x-test")]
+		let array_addr = build_load(
+			&mut builder, 
+			state, 
+			pointer_type, 
+			mem_flags, 
+			vmctx, 
+			i32::try_from(ptr_size.vmcontext_builtin_functions()).unwrap(),
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let array_addr = builder.ins().load(
             pointer_type,
             mem_flags,
@@ -538,6 +734,16 @@ impl wasmtime_environ::Compiler for Compiler {
             i32::try_from(ptr_size.vmcontext_builtin_functions()).unwrap(),
         );
         let body_offset = i32::try_from(index.index() * pointer_type.bytes()).unwrap();
+		#[cfg(feature = "wa2x-test")]
+		let func_addr = build_load(
+			&mut builder, 
+			state, 
+			pointer_type, 
+			mem_flags, 
+			array_addr, 
+			body_offset
+		);
+		#[cfg(not(feature = "wa2x-test"))]
         let func_addr = builder
             .ins()
             .load(pointer_type, mem_flags, array_addr, body_offset);
@@ -546,12 +752,20 @@ impl wasmtime_environ::Compiler for Compiler {
         // all the same results as the libcall.
         let block_params = builder.block_params(block0).to_vec();
         let sig = builder.func.import_signature(sig);
+		#[cfg(feature = "wa2x-test")]
+		let call = build_call_indirect(&mut builder, state, sig, func_addr, &block_params);
+		#[cfg(not(feature = "wa2x-test"))]
         let call = builder.ins().call_indirect(sig, func_addr, &block_params);
         let results = builder.func.dfg.inst_results(call).to_vec();
+		#[cfg(feature = "wa2x-test")]
+		build_return(&mut builder, state, &results);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().return_(&results);
         builder.finalize();
 
-        Ok(Box::new(compiler.finish()?))
+		// #[cfg(feature = "wa2x-test")]
+		// eprintln!("symbol:{symbol}");
+		Ok(Box::new(compiler.finish(&self.tunables)?))
     }
 
     fn compiled_function_relocation_targets<'a>(
@@ -582,15 +796,23 @@ mod incremental_cache {
         context: &'a mut Context,
         isa: &dyn TargetIsa,
         cache_ctx: Option<&mut IncrementalCacheContext>,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> Result<(&'a CompiledCode, Vec<u8>), CompileError> {
         let cache_ctx = match cache_ctx {
             Some(ctx) => ctx,
-            None => return compile_uncached(context, isa),
+            None => return compile_uncached(context, isa, #[cfg(feature = "wa2x-test")]debug_ctx),
         };
 
         let mut cache_store = CraneliftCacheStore(cache_ctx.cache_store.clone());
         let (compiled_code, from_cache) = context
-            .compile_with_cache(isa, &mut cache_store, &mut Default::default())
+            .compile_with_cache(
+				isa, 
+				&mut cache_store, 
+				&mut Default::default(),
+				#[cfg(feature = "wa2x-test")]
+				debug_ctx,
+			)
             .map_err(|error| CompileError::Codegen(pretty_error(&error.func, error.inner)))?;
 
         if from_cache {
@@ -611,19 +833,55 @@ fn compile_maybe_cached<'a>(
     context: &'a mut Context,
     isa: &dyn TargetIsa,
     _cache_ctx: Option<&mut IncrementalCacheContext>,
+	#[cfg(feature = "wa2x-test")]
+	debug_ctx: Option<&mut DebugCtx>,
 ) -> Result<(&'a CompiledCode, Vec<u8>), CompileError> {
-    compile_uncached(context, isa)
+    compile_uncached(context, isa, #[cfg(feature = "wa2x-test")] debug_ctx)
 }
 
 fn compile_uncached<'a>(
     context: &'a mut Context,
     isa: &dyn TargetIsa,
+	#[cfg(feature = "wa2x-test")]
+	debug_ctx: Option<&mut DebugCtx>,
 ) -> Result<(&'a CompiledCode, Vec<u8>), CompileError> {
     let mut code_buf = Vec::new();
     let compiled_code = context
-        .compile_and_emit(isa, &mut code_buf, &mut Default::default())
+        .compile_and_emit(
+			isa, 
+			&mut code_buf, 
+			&mut Default::default(),
+			#[cfg(feature = "wa2x-test")]
+			debug_ctx,
+		)
         .map_err(|error| CompileError::Codegen(pretty_error(&error.func, error.inner)))?;
     Ok((compiled_code, code_buf))
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_call_indirect(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState, 
+	sig: ir::SigRef, 
+	callee: ir::Value, 
+	args: &[Value],
+) -> ir::Inst {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "IndirectCall", source_location);
+	builder.ins().call_indirect(sig, callee, args)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn build_return(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+	rvals: &[Value]
+) -> ir::Inst {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Return", source_location);
+	builder.ins().return_(rvals)
 }
 
 impl Compiler {
@@ -640,6 +898,8 @@ impl Compiler {
         &self,
         ty: &WasmFuncType,
         builder: &mut FunctionBuilder,
+		#[cfg(feature = "wa2x-test")]
+		state: Option<&mut FuncTranslationState>,
         args: &[ir::Value],
     ) -> (Value, u32) {
         let isa = &*self.isa;
@@ -662,7 +922,7 @@ impl Compiler {
             let values_vec_len = builder
                 .ins()
                 .iconst(ir::types::I32, i64::try_from(values_vec_len).unwrap());
-            self.store_values_to_array(builder, ty.params(), args, values_vec_ptr, values_vec_len);
+            self.store_values_to_array(builder, #[cfg(feature = "wa2x-test")]state, ty.params(), args, values_vec_ptr, values_vec_len);
         }
 
         (values_vec_ptr, values_vec_len)
@@ -677,6 +937,8 @@ impl Compiler {
     fn store_values_to_array(
         &self,
         builder: &mut FunctionBuilder,
+		#[cfg(feature = "wa2x-test")]
+		mut state: Option<&mut FuncTranslationState>,
         types: &[WasmValType],
         values: &[Value],
         values_vec_ptr: Value,
@@ -699,6 +961,8 @@ impl Compiler {
             crate::unbarriered_store_type_at_offset(
                 &*self.isa,
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				&mut state,
                 *ty,
                 flags,
                 values_vec_ptr,
@@ -719,6 +983,8 @@ impl Compiler {
         &self,
         types: &[WasmValType],
         builder: &mut FunctionBuilder,
+		#[cfg(feature = "wa2x-test")]
+		mut state: Option<&mut FuncTranslationState>,
         values_vec_ptr: Value,
         values_vec_capacity: Value,
     ) -> Vec<ir::Value> {
@@ -738,6 +1004,8 @@ impl Compiler {
             results.push(crate::unbarriered_load_type_at_offset(
                 isa,
                 &mut builder.cursor(),
+				#[cfg(feature = "wa2x-test")]
+				&mut state,
                 *ty,
                 flags,
                 values_vec_ptr,
@@ -791,26 +1059,43 @@ impl FunctionCompiler<'_> {
         (builder, block0)
     }
 
-    fn finish(self) -> Result<CompiledFunction, CompileError> {
-        let (info, func) = self.finish_with_info(None)?;
+    fn finish(self, tunables: &Tunables) -> Result<CompiledFunction, CompileError> {
+        let (info, func) = self.finish_with_info(None, tunables)?;
         assert!(info.stack_maps.is_empty());
         Ok(func)
     }
 
     fn finish_with_info(
         mut self,
-        body_and_tunables: Option<(&FunctionBody<'_>, &Tunables)>,
+		body: Option<&FunctionBody<'_>>,
+		tunables: &Tunables,
     ) -> Result<(WasmFunctionInfo, CompiledFunction), CompileError> {
+		#[cfg(feature = "wa2x-test")]
+		let base = self.cx.codegen_context.func.params.base_srcloc();
         let context = &mut self.cx.codegen_context;
         let isa = &*self.compiler.isa;
+		#[cfg(feature = "wa2x-test")]
+		let debug_ctx = {
+			let mut debug_ctx = self.cx.func_translator.state().debug_ctx();
+			if let Some(debug_ctx) = debug_ctx.as_mut() {
+				debug_ctx.set_current_base(base);
+			}
+			debug_ctx
+		};
         let (_, _code_buf) =
-            compile_maybe_cached(context, isa, self.cx.incremental_cache_ctx.as_mut())?;
+            compile_maybe_cached(
+				context, 
+				isa, 
+				self.cx.incremental_cache_ctx.as_mut(),
+				#[cfg(feature = "wa2x-test")]
+				debug_ctx
+			)?;
         let mut compiled_code = context.take_compiled_code().unwrap();
 
         // Give wasm functions, user defined code, a "preferred" alignment
         // instead of the minimum alignment as this can help perf in niche
         // situations.
-        let preferred_alignment = if body_and_tunables.is_some() {
+        let preferred_alignment = if body.is_some() {
             self.compiler.isa.function_alignment().preferred
         } else {
             1
@@ -823,16 +1108,35 @@ impl FunctionCompiler<'_> {
             alignment,
         );
 
-        if let Some((body, tunables)) = body_and_tunables {
-            let data = body.get_binary_reader();
-            let offset = data.original_position();
-            let len = data.bytes_remaining();
-            compiled_function.set_address_map(
-                offset as u32,
-                len as u32,
-                tunables.generate_address_map,
-            );
-        }
+		#[cfg(feature = "wa2x-test")]
+		if let Some(body) = body {
+			let data = body.get_binary_reader();
+			let offset = data.original_position();
+			let len = data.bytes_remaining();
+			compiled_function.set_address_map(
+				offset as u32,
+				len as u32,
+				tunables.generate_address_map || tunables.wa2x_debug_info,
+			);
+		} else {
+			compiled_function.set_address_map(
+				0, 
+				0, 
+				tunables.generate_address_map || tunables.wa2x_debug_info,
+			);
+		}
+
+		#[cfg(not(feature = "wa2x-test"))]
+		if let Some(body) = body {
+			let data = body.get_binary_reader();
+			let offset = data.original_position();
+			let len = data.bytes_remaining();
+			compiled_function.set_address_map(
+				offset as u32,
+				len as u32,
+				tunables.generate_address_map,
+			);
+		}
 
         if isa.flags().unwind_info() {
             let unwind = compiled_code
@@ -844,10 +1148,7 @@ impl FunctionCompiler<'_> {
             }
         }
 
-        if body_and_tunables
-            .map(|(_, t)| t.generate_native_debuginfo)
-            .unwrap_or(false)
-        {
+		if tunables.generate_native_debuginfo {
             compiled_function.set_value_labels_ranges(compiled_code.value_labels_ranges.clone());
 
             // DWARF debugging needs the CFA-based unwind information even on Windows.
@@ -926,6 +1227,20 @@ fn declare_and_call(
     builder.ins().call(callee, &args)
 }
 
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn declare_and_call_with_debug(
+    builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+    signature: ir::Signature,
+    func_index: u32,
+    args: &[ir::Value],
+) -> ir::Inst {
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Call", source_location);
+	declare_and_call(builder, signature, func_index, args)
+}
+
 fn debug_assert_enough_capacity_for_length(
     builder: &mut FunctionBuilder,
     length: usize,
@@ -968,6 +1283,112 @@ fn debug_assert_vmctx_kind(
     }
 }
 
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+pub fn build_store<T1, T2>(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+	mem_flags: T1,
+	x: ir::Value,
+	p: ir::Value,
+	offset: T2,
+) -> ir::Inst
+where 
+	T1: Into<MemFlags>,
+	T2: Into<ir::immediates::Offset32>
+{
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Store", source_location);
+	builder.ins().store(mem_flags, x, p, offset)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+pub fn build_cursor_store<T1, T2>(
+	pos: &mut FuncCursor,
+	state: &mut FuncTranslationState,
+	mem_flags: T1,
+	x: ir::Value,
+	p: ir::Value,
+	offset: T2,
+) -> ir::Inst
+where 
+	T1: Into<MemFlags>,
+	T2: Into<ir::immediates::Offset32>
+{
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info_cursor(pos, "Store", source_location);
+	pos.ins().store(mem_flags, x, p, offset)
+}
+
+#[cfg(feature = "wa2x-test")]
+fn save_last_wasm_entry_sp_with_debug(
+    builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+    pointer_type: ir::Type,
+    ptr_size: &impl PtrSize,
+    vm_runtime_limits_offset: u32,
+    vmctx: Value,
+) {
+    // First we need to get the `VMRuntimeLimits`.
+    let limits = builder.ins().load(
+        pointer_type,
+        MemFlags::trusted(),
+        vmctx,
+        i32::try_from(vm_runtime_limits_offset).unwrap(),
+    );
+
+    // Then store our current stack pointer into the appropriate slot.
+    let sp = builder.ins().get_stack_pointer(pointer_type);
+	build_store(
+		builder, 
+		state, 
+		MemFlags::trusted(), 
+		sp, 
+		limits, 
+		ptr_size.vmruntime_limits_last_wasm_entry_sp()
+	);
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+pub fn build_load<T1, T2>(
+	builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+	mem: ir::Type,
+	mem_flags: T1,
+	p: ir::Value,
+	offset: T2,
+) -> ir::Value
+where 
+	T1: Into<MemFlags>,
+	T2: Into<ir::immediates::Offset32>
+{
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info(builder, "Load", source_location);
+	builder.ins().load(mem, mem_flags, p, offset)
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+pub fn build_cursor_load<T1, T2>(
+	pos: &mut FuncCursor,
+	state: &mut FuncTranslationState,
+	mem: ir::Type,
+	mem_flags: T1,
+	p: ir::Value,
+	offset: T2,
+) -> ir::Value
+where 
+	T1: Into<MemFlags>,
+	T2: Into<ir::immediates::Offset32>
+{
+	let source_location = std::panic::Location::caller();
+	state.add_debug_info_cursor(pos, "Load", source_location);
+	pos.ins().load(mem, mem_flags, p, offset)
+}
+
+#[cfg(not(feature = "wa2x-test"))]
 fn save_last_wasm_entry_sp(
     builder: &mut FunctionBuilder,
     pointer_type: ir::Type,
@@ -991,6 +1412,47 @@ fn save_last_wasm_entry_sp(
         limits,
         ptr_size.vmruntime_limits_last_wasm_entry_sp(),
     );
+}
+
+#[cfg(feature = "wa2x-test")]
+fn save_last_wasm_exit_fp_and_pc_with_debug(
+    builder: &mut FunctionBuilder,
+	state: &mut FuncTranslationState,
+    pointer_type: ir::Type,
+    ptr: &impl PtrSize,
+    limits: Value,
+) {
+    // Save the exit Wasm FP to the limits. We dereference the current FP to get
+    // the previous FP because the current FP is the trampoline's FP, and we
+    // want the Wasm function's FP, which is the caller of this trampoline.
+    let trampoline_fp = builder.ins().get_frame_pointer(pointer_type);
+    let wasm_fp = builder.ins().load(
+        pointer_type,
+        MemFlags::trusted(),
+        trampoline_fp,
+        // The FP always points to the next older FP for all supported
+        // targets. See assertion in
+        // `crates/wasmtime/src/runtime/vm/traphandlers/backtrace.rs`.
+        0,
+    );
+	build_store(
+		builder, 
+		state, 
+		MemFlags::trusted(), 
+		wasm_fp, 
+		limits, 
+		ptr.vmruntime_limits_last_wasm_exit_fp(),
+	);
+    // Finally save the Wasm return address to the limits.
+    let wasm_pc = builder.ins().get_return_address(pointer_type);
+	build_store(
+		builder, 
+		state, 
+		MemFlags::trusted(), 
+		wasm_pc, 
+		limits, 
+		ptr.vmruntime_limits_last_wasm_exit_pc(),
+	);
 }
 
 fn save_last_wasm_exit_fp_and_pc(

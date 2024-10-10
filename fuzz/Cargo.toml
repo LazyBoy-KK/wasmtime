@@ -44,6 +44,7 @@ component-fuzz-util = { workspace = true }
 default = ['fuzz-spec-interpreter']
 fuzz-spec-interpreter = ['wasmtime-fuzzing/fuzz-spec-interpreter']
 chaos = ["cranelift-control/chaos"]
+wa2x-test = ["cranelift-wasm/wa2x-test"]
 
 [[bin]]
 name = "compile"

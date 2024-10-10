@@ -91,6 +91,8 @@ impl wasmtime_environ::Compiler for Compiler {
         index: DefinedFuncIndex,
         data: FunctionBodyData<'_>,
         types: &ModuleTypesBuilder,
+		#[cfg(feature = "wa2x-test")]
+		_symbol: &str,
     ) -> Result<(WasmFunctionInfo, Box<dyn Any + Send>), CompileError> {
         let index = translation.module.func_index(index);
         let sig = translation.module.functions[index].signature;
@@ -139,17 +141,21 @@ impl wasmtime_environ::Compiler for Compiler {
         translation: &ModuleTranslation<'_>,
         types: &ModuleTypesBuilder,
         index: DefinedFuncIndex,
+		#[cfg(feature = "wa2x-test")]
+		_symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
         self.trampolines
-            .compile_array_to_wasm_trampoline(translation, types, index)
+            .compile_array_to_wasm_trampoline(translation, types, index, #[cfg(feature = "wa2x-test")]"")
     }
 
     fn compile_wasm_to_array_trampoline(
         &self,
         wasm_func_ty: &wasmtime_environ::WasmFuncType,
+		#[cfg(feature = "wa2x-test")]
+		_symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
         self.trampolines
-            .compile_wasm_to_array_trampoline(wasm_func_ty)
+            .compile_wasm_to_array_trampoline(wasm_func_ty, #[cfg(feature = "wa2x-test")]"")
     }
 
     fn append_code(
@@ -229,8 +235,10 @@ impl wasmtime_environ::Compiler for Compiler {
     fn compile_wasm_to_builtin(
         &self,
         index: BuiltinFunctionIndex,
+		#[cfg(feature = "wa2x-test")]
+		_symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
-        self.trampolines.compile_wasm_to_builtin(index)
+        self.trampolines.compile_wasm_to_builtin(index, #[cfg(feature = "wa2x-test")]"")
     }
 
     fn compiled_function_relocation_targets<'a>(

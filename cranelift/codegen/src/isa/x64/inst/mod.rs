@@ -2589,6 +2589,80 @@ impl MachInst for Inst {
         panic!("TODO FILL ME OUT")
     }
 
+	#[cfg(feature = "wa2x-test")]
+	fn is_load(&self) -> bool {
+		match self {
+			// exclude xmm
+			&Self::Mov64MR { .. } | &Self::Push64 { .. } => true,
+			_ => false,
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_store(&self) -> bool {
+		match &self {
+			// exclude xmm
+			Self::MovRM { .. } | Self::MovImmM { .. } | Self::AluRM { .. } | Self::Pop64 { .. } => true,
+			Self::MovsxRmR { src, .. } => {
+				match src.clone().to_reg_mem() {
+					RegMem::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			Self::MovzxRmR { src, .. } => {
+				match src.clone().to_reg_mem() {
+					RegMem::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			Self::AluRmRVex { src2, .. } => {
+				match src2.clone().to_reg_mem() {
+					RegMem::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			Self::AluRmiR { src2, .. } => {
+				match src2.clone().to_reg_mem_imm() {
+					RegMemImm::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			Self::CmpRmiR { src2, .. } => {
+				match src2.clone().to_reg_mem_imm() {
+					RegMemImm::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			Self::UnaryRmR { src, .. } => {
+				match src.clone().to_reg_mem() {
+					RegMem::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			Self::UnaryRmRImmVex { src, .. } => {
+				match src.clone().to_reg_mem() {
+					RegMem::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			Self::UnaryRmRVex { src, .. } => {
+				match src.clone().to_reg_mem() {
+					RegMem::Mem { .. } => true,
+					_ => false,
+				}
+			}
+			_ => false,
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	fn is_trapif(&self) -> bool {
+		match &self {
+			Self::TrapIf { .. } | Self::TrapIfAnd { .. } | Self::TrapIfOr { .. } => true,
+			_ => false,
+		}
+	}
+
     fn gen_move(dst_reg: Writable<Reg>, src_reg: Reg, ty: Type) -> Inst {
         trace!(
             "Inst::gen_move {:?} -> {:?} (type: {:?})",

@@ -17,6 +17,8 @@
 //! See the main module comment in `mod.rs` for more details on the VCode-based
 //! backend pipeline.
 
+#[cfg(feature = "wa2x-test")]
+use crate::debug_ctx::DebugCtx;
 use crate::ir::pcc::*;
 use crate::ir::{self, types, Constant, ConstantData, ValueLabel};
 use crate::machinst::*;
@@ -732,6 +734,8 @@ impl<I: VCodeInst> VCode<I> {
         want_disasm: bool,
         flags: &settings::Flags,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		mut debug_ctx: Option<&mut DebugCtx>,
     ) -> EmitResult
     where
         I: VCodeInst,
@@ -840,10 +844,30 @@ impl<I: VCodeInst> VCode<I> {
             // Is this the first block? Emit the prologue directly if so.
             if block == self.entry {
                 trace!(" -> entry block");
+				#[cfg(not(feature = "wa2x-test"))]
                 buffer.start_srcloc(Default::default());
+				#[cfg(feature = "wa2x-test")]
+				if let Some(debug_ctx) = debug_ctx.as_mut() {
+					debug_ctx.add_debug_info(format!("Prologue of current function!\n"));
+				}
                 for inst in &self.abi.gen_prologue() {
+					#[cfg(feature = "wa2x-test")]
+					{
+						let srcloc = if let Some(debug_ctx) = debug_ctx.as_mut(){
+							let (_, rel_srcloc) = add_debug_info(debug_ctx, inst);
+							rel_srcloc
+						} else {
+							Default::default()
+						};
+						buffer.start_srcloc(srcloc);
+					}
                     do_emit(&inst, &mut disasm, &mut buffer, &mut state);
+					#[cfg(feature = "wa2x-test")]
+					if debug_ctx.is_some() {
+						buffer.end_srcloc();
+					}
                 }
+				#[cfg(not(feature = "wa2x-test"))]
                 buffer.end_srcloc();
             }
 
@@ -971,7 +995,20 @@ impl<I: VCodeInst> VCode<I> {
                         // (and don't emit the return; the actual
                         // epilogue will contain it).
                         if self.insts[iix.index()].is_term() == MachTerminator::Ret {
-                            for inst in self.abi.gen_epilogue() {
+							#[cfg(feature = "wa2x-test")]
+							if let Some(debug_ctx) = debug_ctx.as_mut() {
+								debug_ctx.add_debug_info(format!("Epilogue of current function!\n"));
+							}
+							for inst in self.abi.gen_epilogue() {
+								#[cfg(feature = "wa2x-test")]
+								if let Some(debug_ctx) = debug_ctx.as_mut() {
+									if cur_srcloc.is_some() {
+										buffer.end_srcloc();
+									}
+									let (_, srcloc) = add_debug_info(debug_ctx, &inst);
+									buffer.start_srcloc(srcloc);
+									cur_srcloc = Some(srcloc);
+								}
                                 do_emit(&inst, &mut disasm, &mut buffer, &mut state);
                             }
                         } else {
@@ -1490,6 +1527,29 @@ impl<I: VCodeInst> fmt::Debug for VCode<I> {
         writeln!(f, "}}")?;
         Ok(())
     }
+}
+
+#[cfg(feature = "wa2x-test")]
+#[track_caller]
+fn add_debug_info<I: VCodeInst>(debug_ctx: &mut DebugCtx, inst: &I) -> (ir::SourceLoc, ir::RelSourceLoc) {
+	let source_location = std::panic::Location::caller();
+	if I::is_load(inst) {
+		debug_ctx.add_debug_info(format!("\tCraneliftIRInfo Load {source_location}\n"))
+	} else if I::is_store(inst) {
+		debug_ctx.add_debug_info(format!("\tCraneliftIRInfo Store {source_location}\n"))
+	} else {
+		match I::is_term(inst) {
+			MachTerminator::Cond => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo CondBranch {source_location}\n")),
+			MachTerminator::Uncond | MachTerminator::Indirect => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo UncondBranch {source_location}\n")),
+			MachTerminator::Ret => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo Ret {source_location}\n")),
+			MachTerminator::RetCall => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo RetCall {source_location}\n")),
+			_ => if I::is_trapif(inst) {
+				debug_ctx.add_debug_info(format!("\tCraneliftIRInfo CondBranch {source_location}\n"))
+			} else {
+				(Default::default(), Default::default())
+			}
+		}
+	}
 }
 
 /// This structure manages VReg allocation during the lifetime of the VCodeBuilder.

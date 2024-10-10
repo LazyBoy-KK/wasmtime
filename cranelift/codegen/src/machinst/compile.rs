@@ -30,7 +30,7 @@ pub fn compile<B: LowerBackend + TargetIsa>(
         crate::machinst::Lower::new(f, abi, emit_info, block_order, sigs, b.flags().clone())?;
 
     // Lower the IR.
-    let mut vcode = {
+    let mut vcode: VCode<<B as LowerBackend>::MInst> = {
         log::debug!(
             "Number of CLIF instructions to lower: {}",
             f.dfg.num_insts()

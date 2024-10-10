@@ -4,6 +4,8 @@
 //! function to Cranelift IR guided by a `FuncEnvironment` which provides information about the
 //! WebAssembly module and the runtime environment.
 
+#[cfg(feature = "wa2x-test")]
+use cranelift_codegen::debug_ctx::DebugCtx;
 use crate::code_translator::{bitcast_wasm_returns, translate_operator};
 use crate::environ::FuncEnvironment;
 use crate::state::FuncTranslationState;
@@ -40,6 +42,18 @@ impl FuncTranslator {
         &mut self.func_ctx
     }
 
+	#[cfg(feature = "wa2x-test")]
+	/// Returns `FuncTranslationState`
+	pub fn state(&mut self) -> &mut FuncTranslationState {
+		&mut self.state
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	/// Returns `FuncTranslationState` reference
+	pub fn state_ref(&self) -> &FuncTranslationState {
+		&self.state
+	}
+
     /// Translate a binary WebAssembly function from a `FunctionBody`.
     ///
     /// See [the WebAssembly specification][wasm].
@@ -56,6 +70,8 @@ impl FuncTranslator {
         body: FunctionBody<'_>,
         func: &mut ir::Function,
         environ: &mut FE,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> WasmResult<()> {
         let _tt = timing::wasm_translate_function();
         let mut reader = body.get_binary_reader();
@@ -69,6 +85,9 @@ impl FuncTranslator {
         debug_assert_eq!(func.dfg.num_insts(), 0, "Function must be empty");
 
         let mut builder = FunctionBuilder::new(func, &mut self.func_ctx);
+		#[cfg(feature = "wa2x-test")]
+		self.state.add_func_debug_info(&mut builder, symbol);
+		#[cfg(not(feature = "wa2x-test"))]
         builder.set_srcloc(cur_srcloc(&reader));
         let entry_block = builder.create_block();
         builder.append_block_params_for_function_params(entry_block);
@@ -142,6 +161,7 @@ fn parse_local_decls<FE: FuncEnvironment + ?Sized>(
     let local_count = reader.read_var_u32()?;
 
     for _ in 0..local_count {
+		#[cfg(not(feature = "wa2x-test"))]
         builder.set_srcloc(cur_srcloc(reader));
         let pos = reader.original_position();
         let count = reader.read_var_u32()?;
@@ -215,6 +235,36 @@ fn declare_locals<FE: FuncEnvironment + ?Sized>(
     Ok(())
 }
 
+#[cfg(feature = "wa2x-test")]
+struct DebugVisitor<'a> {
+	ctx: &'a mut DebugCtx,
+}
+
+#[cfg(feature = "wa2x-test")]
+macro_rules! define_visit_operator {
+    ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
+        $(fn $visit(&mut self $($(,$arg: $argty)*)?) -> Self::Output {
+			let mut info = std::string::String::new();
+			info.push_str("\tWasmOpcode ");
+			info.push_str(stringify!($op));
+			$(
+				$(
+					info.push_str(&format!(" {:?}", $arg));
+				)*
+			)?
+			info.push_str("\n");
+			self.ctx.add_debug_info(info);
+        })*
+    };
+}
+
+#[cfg(feature = "wa2x-test")]
+impl<'a> wasmparser::VisitOperator<'a> for DebugVisitor<'_> {
+    wasmparser::for_each_operator!(define_visit_operator);
+
+    type Output = ();
+}
+
 /// Parse the function body in `reader`.
 ///
 /// This assumes that the local variable declarations have already been parsed and function
@@ -230,9 +280,20 @@ fn parse_function_body<FE: FuncEnvironment + ?Sized>(
     debug_assert_eq!(state.control_stack.len(), 1, "State not initialized");
 
     environ.before_translate_function(builder, state)?;
+	#[cfg(feature = "wa2x-test")]
+	let mut debug_reader = reader.clone();
     while !reader.eof() {
         let pos = reader.original_position();
+		#[cfg(not(feature = "wa2x-test"))]
         builder.set_srcloc(cur_srcloc(&reader));
+		#[cfg(feature = "wa2x-test")]
+		if let Some(ctx) = state.debug_ctx.as_mut() {
+			let mut visitor = DebugVisitor { ctx };
+			debug_reader.visit_operator(&mut visitor)?;
+			builder.set_srcloc(ctx.line());
+		} else {
+			builder.set_srcloc(cur_srcloc(&reader));
+		}
         let op = reader.read_operator()?;
         validator.op(pos, &op)?;
         environ.before_translate_operator(&op, builder, state)?;

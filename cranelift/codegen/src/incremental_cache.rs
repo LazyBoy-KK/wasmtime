@@ -22,6 +22,8 @@
 
 use core::fmt;
 
+#[cfg(feature = "wa2x-test")]
+use crate::debug_ctx::DebugCtx;
 use crate::alloc::string::String;
 use crate::alloc::vec::Vec;
 use crate::ir::function::{FunctionStencil, VersionMarker};
@@ -42,6 +44,8 @@ impl Context {
         isa: &dyn TargetIsa,
         cache_store: &mut dyn CacheKvStore,
         ctrl_plane: &mut ControlPlane,
+		#[cfg(feature = "wa2x-test")]
+		debug_ctx: Option<&mut DebugCtx>,
     ) -> CompileResult<(&CompiledCode, bool)> {
         let cache_key_hash = {
             let _tt = timing::try_incremental_cache();
@@ -54,7 +58,12 @@ impl Context {
                         let info = compiled_code.code_info();
 
                         if isa.flags().enable_incremental_compilation_cache_checks() {
-                            let actual_result = self.compile(isa, ctrl_plane)?;
+                            let actual_result = self.compile(
+								isa, 
+								ctrl_plane,
+								#[cfg(feature = "wa2x-test")]
+								debug_ctx,
+							)?;
                             assert_eq!(*actual_result, compiled_code);
                             assert_eq!(actual_result.code_info(), info);
                             // no need to set `compiled_code` here, it's set by `compile()`.
@@ -74,7 +83,12 @@ impl Context {
         };
 
         let stencil = self
-            .compile_stencil(isa, ctrl_plane)
+            .compile_stencil(
+				isa, 
+				ctrl_plane,
+				#[cfg(feature = "wa2x-test")]
+				debug_ctx,
+			)
             .map_err(|err| CompileError {
                 inner: err,
                 func: &self.func,

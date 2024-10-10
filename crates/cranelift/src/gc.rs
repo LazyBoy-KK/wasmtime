@@ -34,7 +34,7 @@ pub fn gc_compiler(func_env: &FuncEnvironment<'_>) -> Box<dyn GcCompiler> {
 /// Because Cranelift doesn't support using `r32` with 64-bit targets, this
 /// means that the loaded value may need to be extended.
 pub fn unbarriered_load_gc_ref(
-    func_env: &FuncEnvironment<'_>,
+    func_env: &mut FuncEnvironment<'_>,
     builder: &mut FunctionBuilder<'_>,
     ty: WasmHeapType,
     src: ir::Value,
@@ -57,7 +57,7 @@ pub fn unbarriered_load_gc_ref(
 /// `VMGcRef`s on the Wasm stack as `r64`s with the top half unset, and this
 /// means that `value` may need to be truncated.
 pub fn unbarriered_store_gc_ref(
-    func_env: &FuncEnvironment<'_>,
+    func_env: &mut FuncEnvironment<'_>,
     builder: &mut FunctionBuilder<'_>,
     ty: WasmHeapType,
     dst: ir::Value,

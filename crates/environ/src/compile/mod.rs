@@ -28,6 +28,9 @@ pub use self::module_environ::*;
 pub use self::module_types::*;
 pub use self::trap_encoding::*;
 
+// #[cfg(feature = "wa2x-test")]
+
+
 /// An error while compiling WebAssembly to machine code.
 #[derive(Debug)]
 pub enum CompileError {
@@ -195,6 +198,8 @@ pub trait Compiler: Send + Sync {
         index: DefinedFuncIndex,
         data: FunctionBodyData<'_>,
         types: &ModuleTypesBuilder,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<(WasmFunctionInfo, Box<dyn Any + Send>), CompileError>;
 
     /// Compile a trampoline for an array-call host function caller calling the
@@ -207,6 +212,8 @@ pub trait Compiler: Send + Sync {
         translation: &ModuleTranslation<'_>,
         types: &ModuleTypesBuilder,
         index: DefinedFuncIndex,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError>;
 
     /// Compile a trampoline for a Wasm caller calling a array callee with the
@@ -217,6 +224,8 @@ pub trait Compiler: Send + Sync {
     fn compile_wasm_to_array_trampoline(
         &self,
         wasm_func_ty: &WasmFuncType,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError>;
 
     /// Creates a tramopline that can be used to call Wasmtime's implementation
@@ -231,6 +240,8 @@ pub trait Compiler: Send + Sync {
     fn compile_wasm_to_builtin(
         &self,
         index: BuiltinFunctionIndex,
+		#[cfg(feature = "wa2x-test")]
+		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError>;
 
     /// Returns the list of relocations required for a function from one of the
@@ -376,4 +387,10 @@ pub trait Compiler: Send + Sync {
         // By default, an ISA cannot create a System V CIE.
         None
     }
+
+	#[cfg(feature = "wa2x-test")]
+	/// Output wa2x debug info to specific file
+	fn output_wa2x_debug_info(&self) -> Result<()> {
+		unreachable!()
+	}
 }

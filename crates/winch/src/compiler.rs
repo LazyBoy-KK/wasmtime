@@ -235,10 +235,8 @@ impl wasmtime_environ::Compiler for Compiler {
     fn compile_wasm_to_builtin(
         &self,
         index: BuiltinFunctionIndex,
-		#[cfg(feature = "wa2x-test")]
-		_symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
-        self.trampolines.compile_wasm_to_builtin(index, #[cfg(feature = "wa2x-test")]"")
+        self.trampolines.compile_wasm_to_builtin(index)
     }
 
     fn compiled_function_relocation_targets<'a>(

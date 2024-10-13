@@ -240,8 +240,6 @@ pub trait Compiler: Send + Sync {
     fn compile_wasm_to_builtin(
         &self,
         index: BuiltinFunctionIndex,
-		#[cfg(feature = "wa2x-test")]
-		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError>;
 
     /// Returns the list of relocations required for a function from one of the

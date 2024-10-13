@@ -320,27 +320,6 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
 
 	#[cfg(feature = "wa2x-test")]
 	#[track_caller]
-	pub fn build_trap_with_debug<T1: Into<ir::TrapCode>>(
-		&mut self, 
-		builder: &mut FunctionBuilder,
-		nz: bool,
-		c: ir::Value,
-		code: T1
-	) -> ir::Inst {
-		if let Some(state) = self.state.as_mut() {
-			let source_location = std::panic::Location::caller();
-			state.add_debug_info(builder, "CondBranch", source_location);
-		}
-
-		if nz {
-			builder.ins().trapnz(c, code)
-		} else {
-			builder.ins().trapz(c, code)
-		}
-	}
-
-	#[cfg(feature = "wa2x-test")]
-	#[track_caller]
 	pub fn build_jump_with_debug(
 		&mut self, 
 		builder: &mut FunctionBuilder,
@@ -1900,7 +1879,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
     fn direct_call_inst(&mut self, callee: ir::FuncRef, args: &[ir::Value]) -> ir::Inst {
 		#[cfg(feature = "wa2x-test")]
 		if let Some((state, ir_loc)) = self.debug_ctx.as_mut() {
-			state.add_debug_info(self.builder, "Call", ir_loc);
+			state.add_call_debug_info(self.builder, "Call", ir_loc);
 		}
         if self.tail {
             self.builder.ins().return_call(callee, args)
@@ -1917,7 +1896,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
     ) -> ir::Inst {
 		#[cfg(feature = "wa2x-test")]
 		if let Some((state, ir_loc)) = self.debug_ctx.as_mut() {
-			state.add_debug_info(self.builder, "IndirectCall", ir_loc);
+			state.add_call_debug_info(self.builder, "IndirectCall", ir_loc);
 		}
         if self.tail {
             self.builder

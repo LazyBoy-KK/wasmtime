@@ -293,7 +293,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 					builder, 
 					state_debug, 
 					loop_body, 
-					state.peekn(params.len())
+					state.peekn(params.len()),
+					false,
 				);
 			}
 			#[cfg(not(feature = "wa2x-test"))]
@@ -333,7 +334,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 					next_block, 
 					&[], 
 					destination, 
-					state.peekn(params.len())
+					state.peekn(params.len()),
+					false
 				);
 				#[cfg(not(feature = "wa2x-test"))]
                 let branch_inst = canonicalise_brif(
@@ -365,6 +367,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                     &[],
                     else_block,
                     state.peekn(params.len()),
+					false,
 				);
 				#[cfg(not(feature = "wa2x-test"))]
                 canonicalise_brif(
@@ -437,6 +440,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 									state_debug, 
 									destination, 
 									state.peekn(params.len()),
+									false,
 								);
 								#[cfg(not(feature = "wa2x-test"))]
                                 canonicalise_then_jump(
@@ -461,6 +465,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 									state_debug, 
 									destination, 
 									state.peekn(num_return_values),
+									false,
 								);
 								#[cfg(not(feature = "wa2x-test"))]
                                 canonicalise_then_jump(
@@ -505,7 +510,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 				builder, 
 				state_debug, 
 				next_block, 
-				return_args
+				return_args,
+				false,
 			);
 			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_then_jump(builder, next_block, return_args);
@@ -572,6 +578,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 				state_debug, 
 				br_destination, 
 				destination_args,
+				true,
 			);
 			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_then_jump(builder, br_destination, destination_args);
@@ -673,6 +680,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 						state_debug, 
 						real_dest_block, 
 						destination_args,
+						false,
 					);
 					#[cfg(not(feature = "wa2x-test"))]
                     canonicalise_then_jump(builder, real_dest_block, destination_args);
@@ -2598,6 +2606,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 				inputs, 
 				else_block, 
 				&[],
+				true,
 			);
 			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_brif(builder, is_null, br_destination, inputs, else_block, &[]);
@@ -2627,7 +2636,8 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
 				else_block, 
 				&[], 
 				br_destination, 
-				inputs
+				inputs,
+				true
 			);
 			#[cfg(not(feature = "wa2x-test"))]
             canonicalise_brif(builder, is_null, else_block, &[], br_destination, inputs);
@@ -3625,6 +3635,7 @@ fn translate_br_if(
 		inputs, 
 		next_block, 
 		&[],
+		true,
 	);
 	#[cfg(not(feature = "wa2x-test"))]
     canonicalise_brif(builder, val, br_destination, inputs, next_block, &[]);
@@ -3950,9 +3961,14 @@ fn canonicalise_then_jump_with_debug(
 	state: &mut FuncTranslationState,
     destination: ir::Block,
     params: &[ir::Value],
+	is_br: bool,
 ) -> ir::Inst {
     let source_location = std::panic::Location::caller();
-	state.add_debug_info(builder, "UncondBranch", source_location);
+	if is_br {
+		state.add_br_debug_info(builder, "UncondBranch", source_location);
+	} else {
+		state.add_debug_info(builder, "UncondBranch", source_location);
+	}
 	canonicalise_then_jump(builder, destination, params)
 }
 
@@ -3989,7 +4005,7 @@ fn translate_br_table_with_debug(
 	jt: ir::JumpTable
 ) -> ir::Inst {
 	let source_location = std::panic::Location::caller();
-	state.add_debug_info(builder, "Switch", source_location);
+	state.add_br_debug_info(builder, "Switch", source_location);
 	builder.ins().br_table(x, jt)
 }
 
@@ -4031,9 +4047,14 @@ fn canonicalise_brif_with_debug(
     params_then: &[ir::Value],
     block_else: ir::Block,
     params_else: &[ir::Value],
+	is_brif: bool,
 ) -> ir::Inst {
 	let source_location = std::panic::Location::caller();
-	state.add_debug_info(builder, "CondBranch", source_location);
+	if is_brif {
+		state.add_br_debug_info(builder, "CondBranch", source_location);
+	} else {
+		state.add_debug_info(builder, "CondBranch", source_location);	
+	}
     canonicalise_brif(builder, cond, block_then, params_then, block_else, params_else)
 }
 

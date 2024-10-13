@@ -662,8 +662,6 @@ impl wasmtime_environ::Compiler for Compiler {
     fn compile_wasm_to_builtin(
         &self,
         index: BuiltinFunctionIndex,
-		#[cfg(feature = "wa2x-test")]
-		symbol: &str,
     ) -> Result<Box<dyn Any + Send>, CompileError> {
         let isa = &*self.isa;
         let ptr_size = isa.pointer_bytes();
@@ -672,44 +670,19 @@ impl wasmtime_environ::Compiler for Compiler {
 
         let mut compiler = self.function_compiler();
         let func = ir::Function::with_name_signature(Default::default(), sig.clone());
-		#[cfg(feature = "wa2x-test")]
-		let state: &mut FuncTranslationState = {
-			if self.tunables.wa2x_debug_info {
-				let state = compiler.cx.func_translator.state();
-				if state.debug_ctx.is_none() {
-					state.debug_ctx = Some(DebugCtx::default());
-				}
-			}
-			unsafe { std::mem::transmute(compiler.cx.func_translator.state()) }
-		};
         let (mut builder, block0) = compiler.builder(func);
-		#[cfg(feature = "wa2x-test")]
-		state.add_func_debug_info(&mut builder, symbol);
         let vmctx = builder.block_params(block0)[0];
 
         // Debug-assert that this is the right kind of vmctx, and then
         // additionally perform the "routine of the exit trampoline" of saving
         // fp/pc/etc.
         debug_assert_vmctx_kind(isa, &mut builder, vmctx, wasmtime_environ::VMCONTEXT_MAGIC);
-		#[cfg(feature = "wa2x-test")]
-		let limits = build_load(
-			&mut builder, 
-			state, 
-			pointer_type,
-            MemFlags::trusted(),
-            vmctx,
-            ptr_size.vmcontext_runtime_limits(),
-		);
-		#[cfg(not(feature = "wa2x-test"))]
         let limits = builder.ins().load(
             pointer_type,
             MemFlags::trusted(),
             vmctx,
             ptr_size.vmcontext_runtime_limits(),
         );
-		#[cfg(feature = "wa2x-test")]
-		save_last_wasm_exit_fp_and_pc_with_debug(&mut builder, state, pointer_type, &ptr_size, limits);
-		#[cfg(not(feature = "wa2x-test"))]
         save_last_wasm_exit_fp_and_pc(&mut builder, pointer_type, &ptr_size, limits);
 
         // Now it's time to delegate to the actual builtin. Builtins are stored
@@ -717,16 +690,6 @@ impl wasmtime_environ::Compiler for Compiler {
         // array and then load the entry of the array that corresponds to this
         // builtin.
         let mem_flags = ir::MemFlags::trusted().with_readonly();
-		#[cfg(feature = "wa2x-test")]
-		let array_addr = build_load(
-			&mut builder, 
-			state, 
-			pointer_type, 
-			mem_flags, 
-			vmctx, 
-			i32::try_from(ptr_size.vmcontext_builtin_functions()).unwrap(),
-		);
-		#[cfg(not(feature = "wa2x-test"))]
         let array_addr = builder.ins().load(
             pointer_type,
             mem_flags,
@@ -734,16 +697,6 @@ impl wasmtime_environ::Compiler for Compiler {
             i32::try_from(ptr_size.vmcontext_builtin_functions()).unwrap(),
         );
         let body_offset = i32::try_from(index.index() * pointer_type.bytes()).unwrap();
-		#[cfg(feature = "wa2x-test")]
-		let func_addr = build_load(
-			&mut builder, 
-			state, 
-			pointer_type, 
-			mem_flags, 
-			array_addr, 
-			body_offset
-		);
-		#[cfg(not(feature = "wa2x-test"))]
         let func_addr = builder
             .ins()
             .load(pointer_type, mem_flags, array_addr, body_offset);
@@ -752,19 +705,11 @@ impl wasmtime_environ::Compiler for Compiler {
         // all the same results as the libcall.
         let block_params = builder.block_params(block0).to_vec();
         let sig = builder.func.import_signature(sig);
-		#[cfg(feature = "wa2x-test")]
-		let call = build_call_indirect(&mut builder, state, sig, func_addr, &block_params);
-		#[cfg(not(feature = "wa2x-test"))]
         let call = builder.ins().call_indirect(sig, func_addr, &block_params);
         let results = builder.func.dfg.inst_results(call).to_vec();
-		#[cfg(feature = "wa2x-test")]
-		build_return(&mut builder, state, &results);
-		#[cfg(not(feature = "wa2x-test"))]
         builder.ins().return_(&results);
         builder.finalize();
 
-		// #[cfg(feature = "wa2x-test")]
-		// eprintln!("symbol:{symbol}");
 		Ok(Box::new(compiler.finish(&self.tunables)?))
     }
 

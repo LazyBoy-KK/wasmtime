@@ -83,26 +83,3 @@ impl DebugCtx {
 		source
 	}
 }
-
-// macro_rules! define_visit_operator {
-//     ($( @$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident)*) => {
-//         $(fn $visit(&mut self $($(,$arg: $argty)*)?) -> Self::Output {
-// 			let mut info = String::new();
-// 			info.push_str("\tWasmOpcode ");
-// 			info.push_str(stringify!($op));
-// 			$(
-// 				$(
-// 					info.push_str(&format!(" {:?}", $arg));
-// 				)*
-// 			)?
-// 			info.push_str("\n");
-// 			self.add_debug_info(info);
-//         })*
-//     };
-// }
-
-// impl<'a> wasmparser::VisitOperator<'a> for DebugCtx {
-//     wasmparser::for_each_operator!(define_visit_operator);
-
-//     type Output = ();
-// }

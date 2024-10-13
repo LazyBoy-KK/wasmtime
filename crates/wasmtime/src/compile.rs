@@ -574,7 +574,7 @@ fn compile_required_builtins(engine: &Engine, raw_outputs: &mut Vec<CompileOutpu
             Ok(CompileOutput {
                 key: CompileKey::wasm_to_builtin_trampoline(builtin),
                 symbol: symbol.clone(),
-                function: CompiledFunction::Function(compiler.compile_wasm_to_builtin(builtin, #[cfg(feature = "wa2x-test")]symbol.as_str())?),
+                function: CompiledFunction::Function(compiler.compile_wasm_to_builtin(builtin)?),
                 info: None,
             })
         })

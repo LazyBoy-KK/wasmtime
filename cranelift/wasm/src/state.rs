@@ -325,6 +325,24 @@ impl FuncTranslationState {
 	}
 
 	#[cfg(feature = "wa2x-test")]
+	/// add wa2x debug info for wasm call
+	pub fn add_call_debug_info(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location) {
+		if let Some(ctx) = self.debug_ctx.as_mut() {
+			ctx.add_debug_info(format!("\tCraneliftIRInfo1 {output} {source_location}\n"));
+			builder.set_srcloc(ctx.line());
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
+	/// add wa2x debug info for wasm br
+	pub fn add_br_debug_info(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location) {
+		if let Some(ctx) = self.debug_ctx.as_mut() {
+			ctx.add_debug_info(format!("\tCraneliftIRInfo2 {output} {source_location}\n"));
+			builder.set_srcloc(ctx.line());
+		}
+	}
+
+	#[cfg(feature = "wa2x-test")]
 	/// add wa2x debug info for inst
 	pub fn add_debug_info_cursor(
 		&mut self, 

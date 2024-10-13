@@ -3965,7 +3965,7 @@ fn canonicalise_then_jump_with_debug(
 ) -> ir::Inst {
     let source_location = std::panic::Location::caller();
 	if is_br {
-		state.add_br_debug_info(builder, "UncondBranch", source_location);
+		state.add_debug_info_with_kind(builder, "UncondBranch", source_location, crate::state::InstKind::Br);
 	} else {
 		state.add_debug_info(builder, "UncondBranch", source_location);
 	}
@@ -4005,7 +4005,7 @@ fn translate_br_table_with_debug(
 	jt: ir::JumpTable
 ) -> ir::Inst {
 	let source_location = std::panic::Location::caller();
-	state.add_br_debug_info(builder, "Switch", source_location);
+	state.add_debug_info_with_kind(builder, "Switch", source_location, crate::state::InstKind::BrTable);
 	builder.ins().br_table(x, jt)
 }
 
@@ -4017,7 +4017,7 @@ fn translate_return_with_debug(
 	rvals: &[ir::Value]
 ) -> ir::Inst {
 	let source_location = std::panic::Location::caller();
-	state.add_debug_info(builder, "Return", source_location);
+	state.add_debug_info_with_kind(builder, "Return", source_location, crate::state::InstKind::Return);
 	builder.ins().return_(rvals)
 }
 
@@ -4051,7 +4051,7 @@ fn canonicalise_brif_with_debug(
 ) -> ir::Inst {
 	let source_location = std::panic::Location::caller();
 	if is_brif {
-		state.add_br_debug_info(builder, "CondBranch", source_location);
+		state.add_debug_info_with_kind(builder, "CondBranch", source_location, crate::state::InstKind::BrIf);
 	} else {
 		state.add_debug_info(builder, "CondBranch", source_location);	
 	}

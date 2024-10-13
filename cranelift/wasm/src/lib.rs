@@ -53,6 +53,9 @@ pub use wasmtime_types::*;
 /// wa2x debug text
 pub use cranelift_codegen::debug_ctx;
 
+#[cfg(feature = "wa2x-test")]
+pub use crate::state::InstKind;
+
 // Convenience reexport of the wasmparser crate that we're linking against,
 // since a number of types in `wasmparser` show up in the public API of
 // `cranelift-wasm`.

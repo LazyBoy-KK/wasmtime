@@ -1879,7 +1879,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
     fn direct_call_inst(&mut self, callee: ir::FuncRef, args: &[ir::Value]) -> ir::Inst {
 		#[cfg(feature = "wa2x-test")]
 		if let Some((state, ir_loc)) = self.debug_ctx.as_mut() {
-			state.add_call_debug_info(self.builder, "Call", ir_loc);
+			state.add_debug_info_with_kind(self.builder, "Call", ir_loc, cranelift_wasm::InstKind::CallIndirect);
 		}
         if self.tail {
             self.builder.ins().return_call(callee, args)
@@ -1896,7 +1896,7 @@ impl<'a, 'func, 'module_env> Call<'a, 'func, 'module_env> {
     ) -> ir::Inst {
 		#[cfg(feature = "wa2x-test")]
 		if let Some((state, ir_loc)) = self.debug_ctx.as_mut() {
-			state.add_call_debug_info(self.builder, "IndirectCall", ir_loc);
+			state.add_debug_info_with_kind(self.builder, "IndirectCall", ir_loc, cranelift_wasm::InstKind::Call);
 		}
         if self.tail {
             self.builder

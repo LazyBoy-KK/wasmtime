@@ -251,6 +251,23 @@ pub struct FuncTranslationState {
 	pub debug_ctx: Option<DebugCtx>
 }
 
+#[cfg(feature = "wa2x-test")]
+/// kind of Call Inst
+pub enum InstKind {
+	/// Call
+	Call = 1,
+	/// CallIndirect
+	CallIndirect,
+	/// Br
+	Br,
+	/// BrIf
+	BrIf,
+	/// BrTable
+	BrTable,
+	/// Return
+	Return,
+}
+
 // Public methods that are exposed to non-`cranelift_wasm` API consumers.
 impl FuncTranslationState {
     /// True if the current translation state expresses reachable code, false if it is unreachable.
@@ -319,25 +336,16 @@ impl FuncTranslationState {
 	/// add wa2x debug info for inst
 	pub fn add_debug_info(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location) {
 		if let Some(ctx) = self.debug_ctx.as_mut() {
-			ctx.add_debug_info(format!("\tCraneliftIRInfo {output} {source_location}\n"));
+			ctx.add_debug_info(format!("\tCraneliftIRInfo0 {output} {source_location}\n"));
 			builder.set_srcloc(ctx.line());
 		}
 	}
 
 	#[cfg(feature = "wa2x-test")]
-	/// add wa2x debug info for wasm call
-	pub fn add_call_debug_info(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location) {
+	/// add wa2x debug info for inst
+	pub fn add_debug_info_with_kind(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location, kind: InstKind) {
 		if let Some(ctx) = self.debug_ctx.as_mut() {
-			ctx.add_debug_info(format!("\tCraneliftIRInfo1 {output} {source_location}\n"));
-			builder.set_srcloc(ctx.line());
-		}
-	}
-
-	#[cfg(feature = "wa2x-test")]
-	/// add wa2x debug info for wasm br
-	pub fn add_br_debug_info(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location) {
-		if let Some(ctx) = self.debug_ctx.as_mut() {
-			ctx.add_debug_info(format!("\tCraneliftIRInfo2 {output} {source_location}\n"));
+			ctx.add_debug_info(format!("\tCraneliftIRInfo{} {output} {source_location}\n", kind as u32));
 			builder.set_srcloc(ctx.line());
 		}
 	}

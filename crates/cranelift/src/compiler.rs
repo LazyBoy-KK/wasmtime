@@ -271,7 +271,7 @@ impl wasmtime_environ::Compiler for Compiler {
 					.write(true)
 					.truncate(true)
 					.create(true)
-					.open("./wa2x_debug_info.debug")?;
+					.open("./wasmtime_debug_info.debug")?;
 				output.write(ctx.get_debug_info().as_bytes())?;
 			}
 		}

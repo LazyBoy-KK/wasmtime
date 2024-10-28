@@ -1534,17 +1534,17 @@ impl<I: VCodeInst> fmt::Debug for VCode<I> {
 fn add_debug_info<I: VCodeInst>(debug_ctx: &mut DebugCtx, inst: &I) -> (ir::SourceLoc, ir::RelSourceLoc) {
 	let source_location = std::panic::Location::caller();
 	if I::is_load(inst) {
-		debug_ctx.add_debug_info(format!("\tCraneliftIRInfo0 Load {source_location}\n"))
+		debug_ctx.add_debug_info(format!("\tIRInfo0 Load {source_location}\n"))
 	} else if I::is_store(inst) {
-		debug_ctx.add_debug_info(format!("\tCraneliftIRInfo0 Store {source_location}\n"))
+		debug_ctx.add_debug_info(format!("\tIRInfo0 Store {source_location}\n"))
 	} else {
 		match I::is_term(inst) {
-			MachTerminator::Cond => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo0 CondBranch {source_location}\n")),
-			MachTerminator::Uncond | MachTerminator::Indirect => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo UncondBranch {source_location}\n")),
-			MachTerminator::Ret => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo0 Ret {source_location}\n")),
-			MachTerminator::RetCall => debug_ctx.add_debug_info(format!("\tCraneliftIRInfo0 RetCall {source_location}\n")),
+			MachTerminator::Cond => debug_ctx.add_debug_info(format!("\tIRInfo0 CondBranch {source_location}\n")),
+			MachTerminator::Uncond | MachTerminator::Indirect => debug_ctx.add_debug_info(format!("\tIRInfo UncondBranch {source_location}\n")),
+			MachTerminator::Ret => debug_ctx.add_debug_info(format!("\tIRInfo0 Ret {source_location}\n")),
+			MachTerminator::RetCall => debug_ctx.add_debug_info(format!("\tIRInfo0 RetCall {source_location}\n")),
 			_ => if I::is_trapif(inst) {
-				debug_ctx.add_debug_info(format!("\tCraneliftIRInfo0 CondBranch {source_location}\n"))
+				debug_ctx.add_debug_info(format!("\tIRInfo0 CondBranch {source_location}\n"))
 			} else {
 				(Default::default(), Default::default())
 			}

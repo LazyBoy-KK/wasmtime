@@ -336,7 +336,7 @@ impl FuncTranslationState {
 	/// add wa2x debug info for inst
 	pub fn add_debug_info(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location) {
 		if let Some(ctx) = self.debug_ctx.as_mut() {
-			ctx.add_debug_info(format!("\tCraneliftIRInfo0 {output} {source_location}\n"));
+			ctx.add_debug_info(format!("\tIRInfo0 {output} {source_location}\n"));
 			builder.set_srcloc(ctx.line());
 		}
 	}
@@ -345,7 +345,7 @@ impl FuncTranslationState {
 	/// add wa2x debug info for inst
 	pub fn add_debug_info_with_kind(&mut self, builder: &mut FunctionBuilder, output: &str, source_location: &Location, kind: InstKind) {
 		if let Some(ctx) = self.debug_ctx.as_mut() {
-			ctx.add_debug_info(format!("\tCraneliftIRInfo{} {output} {source_location}\n", kind as u32));
+			ctx.add_debug_info(format!("\tIRInfo{} {output} {source_location}\n", kind as u32));
 			builder.set_srcloc(ctx.line());
 		}
 	}
@@ -360,7 +360,7 @@ impl FuncTranslationState {
 	) {
 		use cranelift_codegen::cursor::Cursor;
 		if let Some(ctx) = self.debug_ctx.as_mut() {
-			ctx.add_debug_info(format!("\tCraneliftIRInfo0 {output} {source_location}\n"));
+			ctx.add_debug_info(format!("\tIRInfo0 {output} {source_location}\n"));
 			pos.set_srcloc(ctx.line());
 		}
 	}

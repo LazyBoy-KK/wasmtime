@@ -36,10 +36,12 @@ impl AddrmapCommand {
 		if let Some(map_iter) = module.address_map() {
 			for (ins_offset, line) in map_iter {
 				if let Some(line) = line {
-					out.write(format!("0x{ins_offset:x} {line}\n").as_bytes())?;
+					out.write(&ins_offset.to_le_bytes())?;
+					out.write(&line.to_le_bytes())?;
 				}
 			}
 		}
+		out.write(&usize::MAX.to_le_bytes())?;
 		Ok(())
 	}
 }

@@ -360,7 +360,7 @@ impl FuncTranslationState {
 	) {
 		use cranelift_codegen::cursor::Cursor;
 		if let Some(ctx) = self.debug_ctx.as_mut() {
-			ctx.add_debug_info(format!("\tCraneliftIRInfo {output} {source_location}\n"));
+			ctx.add_debug_info(format!("\tCraneliftIRInfo0 {output} {source_location}\n"));
 			pos.set_srcloc(ctx.line());
 		}
 	}

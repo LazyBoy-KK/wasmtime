@@ -276,6 +276,18 @@ where
     where
         F: FnMut(*mut VMContext),
     {
+		#[cfg(feature = "wa2x-test")]
+		{
+			use std::io::Write;
+			let stack_pointer = crate::runtime::vm::get_stack_pointer();
+			let path = std::env::var("STACK_BASE_ADDR").unwrap_or("/tmp/stack_base.txt".to_string());
+			let mut fs = std::fs::OpenOptions::new()
+				.create(true)
+				.write(true)
+				.open(path)
+				.unwrap();
+			fs.write(format!("{stack_pointer}").as_bytes()).unwrap();
+		}
         unsafe { (*(payload as *mut F))(caller) }
     }
 }
